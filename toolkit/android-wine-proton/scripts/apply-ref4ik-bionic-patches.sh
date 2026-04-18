@@ -20,5 +20,5 @@ PATCHES=(
 )
 
 echo "Applying local REF4IK March 4, 2026 patchset from $PATCH_DIR"
-"$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "${PATCHES[@]}"
+bash "$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "${PATCHES[@]}"
 echo "Applied ${#PATCHES[@]} REF4IK bionic source patches"

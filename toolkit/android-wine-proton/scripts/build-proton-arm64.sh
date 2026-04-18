@@ -107,7 +107,7 @@ fi
 [[ -f "$SOURCE_DIR/configure" ]] || die "configure not found in $SOURCE_DIR"
 
 # Keep local builds aligned with the workflow patch set for Winlator container exit.
-"$SCRIPT_DIR/apply_patch_series.sh" \
+bash "$SCRIPT_DIR/apply_patch_series.sh" \
     "$SOURCE_DIR" \
     "$SCRIPT_DIR/../patches/ge-gamenative-firstpass/explorer/explorer_startmenu_shutdown_latch.patch"
 python3 "$SCRIPT_DIR/fix_preloader_r_debug_noise.py" "$SOURCE_DIR"
@@ -128,7 +128,7 @@ if [[ $ENABLE_NTSYNC -eq 1 ]]; then
     done
     python3 "$SCRIPT_DIR/strip_generated_ntsync_patch_sections.py" "$NTSYNC_PATCH_DIR"/*.patch
     python3 "$SCRIPT_DIR/fix_ntsync_chain.py" "$SOURCE_DIR"
-    "$SCRIPT_DIR/apply_patch_series.sh" \
+    bash "$SCRIPT_DIR/apply_patch_series.sh" \
         "$SOURCE_DIR" \
         "$NTSYNC_PATCH_DIR/0163-ntdll-Retrieve-and-cache-an-ntsync-device-in-wait-ca.patch" \
         "$NTSYNC_PATCH_DIR/0164-server-Add-an-object-operation-to-retrieve-an-in-pro.patch" \
@@ -140,7 +140,7 @@ fi
 
 if [[ $ENABLE_GE_PERF -eq 1 ]]; then
     log "Applying optional GE performance patch bundle"
-    "$SCRIPT_DIR/apply_patch_series.sh" \
+    bash "$SCRIPT_DIR/apply_patch_series.sh" \
         "$SOURCE_DIR" \
         "$SCRIPT_DIR/../ge-second-pass/performance/6559c43-ntdll-validate-fd-type-in-ioctl-afd-wine-complete-async.patch" \
         "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/wine-hotfixes/wine-wayland/0113-opengl32-Improve-wow64-mapping-performance-by-20x.patch" \
@@ -151,7 +151,7 @@ fi
 
 if [[ $ENABLE_GE_COMPAT -eq 1 ]]; then
     log "Applying optional GE compatibility patch bundle"
-    "$SCRIPT_DIR/apply_patch_series.sh" \
+    bash "$SCRIPT_DIR/apply_patch_series.sh" \
         "$SOURCE_DIR" \
         "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/proton/fix-a-crash-in-ID2D1DeviceContext-if-no-target-is-set.patch" \
         "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/proton/0001-win32u-add-env-switch-to-disable-wm-decorations.patch" \
