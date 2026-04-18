@@ -148,6 +148,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Set up Android NDK
+        id: setup_ndk
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27c
@@ -180,7 +181,7 @@ jobs:
       - name: Build plain Wine package
         shell: bash
         env:
-          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.2.12479018
+          ANDROID_NDK_HOME: ${{ steps.setup_ndk.outputs.ndk-path }}
           LLVM_MINGW_ROOT: /opt/llvm-mingw
           TERMUX_DEPS_PREFIX: /data/data/com.termux/files/usr
           PROFILE_VERSION: ${{ github.event.inputs.wine_version_label || 'wine-bionic' }}

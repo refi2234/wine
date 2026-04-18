@@ -200,6 +200,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Set up Android NDK
+        id: setup_ndk
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27d
@@ -218,7 +219,7 @@ jobs:
       - name: Build Proton ARM64EC package
         shell: bash
         env:
-          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.2.12479018
+          ANDROID_NDK_HOME: ${{ steps.setup_ndk.outputs.ndk-path }}
           PROFILE_VERSION: 11-arm64ec
           PROFILE_VERSION_CODE: 1
           WINLATOR_APP_ID: ${{ github.event.inputs.target_app_id || 'app.gamenative' }}
