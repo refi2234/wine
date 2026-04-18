@@ -39,6 +39,38 @@ RANLIB="$TOOLCHAIN/llvm-ranlib"
 STRIP="$TOOLCHAIN/llvm-strip"
 DLLTOOL="$LLVM_MINGW_ROOT/bin/llvm-dlltool"
 
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR/host" "$BUILD_DIR/target" "$BUILD_DIR/install" output
+
+echo "Preparing Wine build system"
+(
+    cd "$SOURCE_DIR"
+    ./tools/make_requests
+    ./tools/make_specfiles
+    ./tools/make_makefiles
+    autoreconf -f
+)
+
+echo "Configuring host wine-tools"
+(
+    cd "$BUILD_DIR/host"
+    env -u CC -u CXX -u CPPFLAGS -u CFLAGS -u CXXFLAGS -u LDFLAGS -u PKG_CONFIG_LIBDIR -u ACLOCAL_PATH \
+        -u FREETYPE_CFLAGS -u PULSE_CFLAGS -u PULSE_LIBS -u SDL2_CFLAGS -u SDL2_LIBS -u X_CFLAGS -u X_LIBS \
+        -u GSTREAMER_CFLAGS -u GSTREAMER_LIBS -u FFMPEG_CFLAGS -u FFMPEG_LIBS \
+        "$SOURCE_DIR/configure" \
+        --without-x \
+        --without-gstreamer \
+        --without-vulkan \
+        --without-wayland \
+        --enable-wineandroid_drv=no
+)
+
+echo "Building host wine-tools"
+env -u CC -u CXX -u CPPFLAGS -u CFLAGS -u CXXFLAGS -u LDFLAGS -u PKG_CONFIG_LIBDIR -u ACLOCAL_PATH \
+    -u FREETYPE_CFLAGS -u PULSE_CFLAGS -u PULSE_LIBS -u SDL2_CFLAGS -u SDL2_LIBS -u X_CFLAGS -u X_LIBS \
+    -u GSTREAMER_CFLAGS -u GSTREAMER_LIBS -u FFMPEG_CFLAGS -u FFMPEG_LIBS \
+    make -C "$BUILD_DIR/host" -j"$JOBS" __tooldeps__
+
 export PKG_CONFIG_LIBDIR="$DEPS_PREFIX/lib/pkgconfig:$DEPS_PREFIX/share/pkgconfig"
 export ACLOCAL_PATH="$DEPS_PREFIX/lib/aclocal:$DEPS_PREFIX/share/aclocal"
 export CPPFLAGS="-I$DEPS_PREFIX/include/"
@@ -56,32 +88,6 @@ export GSTREAMER_CFLAGS="-I$DEPS_PREFIX/include/gstreamer-1.0 -I$DEPS_PREFIX/inc
 export GSTREAMER_LIBS="-L$DEPS_PREFIX/lib -lgstgl-1.0 -lgstapp-1.0 -lgstvideo-1.0 -lgstaudio-1.0 -lglib-2.0 -lgobject-2.0 -lgio-2.0 -lgsttag-1.0 -lgstbase-1.0 -lgstreamer-1.0"
 export FFMPEG_CFLAGS=""
 export FFMPEG_LIBS=""
-
-rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR/host" "$BUILD_DIR/target" "$BUILD_DIR/install" output
-
-echo "Preparing Wine build system"
-(
-    cd "$SOURCE_DIR"
-    ./tools/make_requests
-    ./tools/make_specfiles
-    ./tools/make_makefiles
-    autoreconf -f
-)
-
-echo "Configuring host wine-tools"
-(
-    cd "$BUILD_DIR/host"
-    env -u CC -u CXX "$SOURCE_DIR/configure" \
-        --without-x \
-        --without-gstreamer \
-        --without-vulkan \
-        --without-wayland \
-        --enable-wineandroid_drv=no
-)
-
-echo "Building host wine-tools"
-make -C "$BUILD_DIR/host" -j"$JOBS" __tooldeps__
 
 PREFIX="/data/data/${APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-${TARGET_ARCH}"
 
