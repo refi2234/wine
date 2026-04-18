@@ -207,13 +207,10 @@ log "Profile version:  $PROFILE_VERSION"
 # ============================================================
 if [[ $SKIP_CONFIGURE -eq 0 && $SKIP_TOOLS -eq 0 ]]; then
     log ""
-    log "--- Step 1: Prepare Wine build system (make_requests etc.) ---"
+    log "--- Step 1: Prepare Wine build system via autogen.sh ---"
     (
         cd "$SOURCE_DIR"
-        ./tools/make_requests
-        ./tools/make_specfiles
-        ./tools/make_makefiles
-        autoreconf -f
+        bash autogen.sh
     )
 
     log "--- Step 1b: Configure host wine-tools ---"
