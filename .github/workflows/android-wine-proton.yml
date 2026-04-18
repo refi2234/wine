@@ -168,13 +168,7 @@ jobs:
             git -C proton-source checkout FETCH_HEAD
             PROTON_HASH="$(git -C proton-source ls-tree HEAD wine | awk '{print $3}' | cut -c1-7)"
             PROTON_DATE="$(git -C proton-source log -1 --format='%cd' --date=format:'%Y%m%d')"
-            PREV_PROTON_HASH="$(python3 - <<'PY'
-import json
-from pathlib import Path
-data = json.loads(Path("toolkit/android-wine-proton/latest.json").read_text(encoding="utf-8"))
-print(data.get("artifacts", {}).get("proton", {}).get("gitHash", ""))
-PY
-)"
+            PREV_PROTON_HASH="$(python3 -c 'import json; from pathlib import Path; data = json.loads(Path("toolkit/android-wine-proton/latest.json").read_text(encoding="utf-8")); print(data.get("artifacts", {}).get("proton", {}).get("gitHash", ""))')"
             if [ "$FORCE_BUILD" = true ] || [ "$PROTON_HASH" != "$PREV_PROTON_HASH" ]; then
               PROTON_SKIP=false
             fi
@@ -190,13 +184,7 @@ PY
             git -C wine-plan-source checkout FETCH_HEAD
             WINE_HASH="$(git -C wine-plan-source rev-parse --short HEAD)"
             WINE_DATE="$(git -C wine-plan-source log -1 --format='%cd' --date=format:'%Y%m%d')"
-            PREV_WINE_HASH="$(python3 - <<'PY'
-import json
-from pathlib import Path
-data = json.loads(Path("toolkit/android-wine-proton/latest.json").read_text(encoding="utf-8"))
-print(data.get("artifacts", {}).get("wine", {}).get("gitHash", ""))
-PY
-)"
+            PREV_WINE_HASH="$(python3 -c 'import json; from pathlib import Path; data = json.loads(Path("toolkit/android-wine-proton/latest.json").read_text(encoding="utf-8")); print(data.get("artifacts", {}).get("wine", {}).get("gitHash", ""))')"
             if [ "$FORCE_BUILD" = true ] || [ "$WINE_HASH" != "$PREV_WINE_HASH" ]; then
               WINE_SKIP=false
             fi
