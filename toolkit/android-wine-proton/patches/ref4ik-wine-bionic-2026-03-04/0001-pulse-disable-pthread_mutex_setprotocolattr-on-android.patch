@@ -1,0 +1,27 @@
+From 4dfa686879be3b9d49dd977f4f4b75204198a979 Mon Sep 17 00:00:00 2001
+From: pipetto-crypto <pipetto-crypto@gmail.com>
+Date: Thu, 13 Mar 2025 16:25:07 +0100
+Subject: [PATCH] pulse: disable pthread_mutex_setprotocolattr on Android
+
+---
+ dlls/winepulse.drv/pulse.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
+index dd8d0b4441d..8de7cfe9ff1 100644
+--- a/dlls/winepulse.drv/pulse.c
++++ b/dlls/winepulse.drv/pulse.c
+@@ -234,8 +234,9 @@ static NTSTATUS pulse_process_attach(void *args)
+     pthread_mutexattr_t attr;
+ 
+     pthread_mutexattr_init(&attr);
++#ifndef __ANDROID__    
+     pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
+-
++#endif
+     if (pthread_mutex_init(&pulse_mutex, &attr) != 0)
+         pthread_mutex_init(&pulse_mutex, NULL);
+ 
+-- 
+2.53.0.windows.2
+
