@@ -10,6 +10,7 @@ source structurally here, then let later ntsync patches apply on top.
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 
@@ -101,6 +102,10 @@ def replace_function_body(text: str, signature: str, new_body: str) -> str:
         raise ValueError(f"function not found: {signature}")
     start, open_brace, close_brace, _ = info
     return text[: open_brace + 1] + new_body + text[close_brace:]
+
+
+def normalize_ws(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def ensure_stubs_block(text: str) -> tuple[str, bool]:
@@ -372,7 +377,8 @@ def main() -> int:
         "inproc_signal_and_wait( signal, wait, alertable, timeout )",
     ]
 
-    missing = [marker for marker in required_markers if marker not in src]
+    normalized_src = normalize_ws(src)
+    missing = [marker for marker in required_markers if normalize_ws(marker) not in normalized_src]
 
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(src)
