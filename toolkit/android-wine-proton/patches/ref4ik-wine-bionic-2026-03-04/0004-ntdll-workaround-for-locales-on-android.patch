@@ -1,0 +1,45 @@
+From 7777491433191b2566c326028c734befa25201ba Mon Sep 17 00:00:00 2001
+From: pipetto-crypto <pipetto-crypto@gmail.com>
+Date: Wed, 28 Jan 2026 15:46:52 +0000
+Subject: [PATCH] ntdll: workaround for locales on Android
+
+Co-authored-by: Capy <capy@capy.ai>
+---
+ dlls/ntdll/unix/env.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/unix/env.c b/dlls/ntdll/unix/env.c
+index b15db0ec23c..8446d1f5b54 100644
+--- a/dlls/ntdll/unix/env.c
++++ b/dlls/ntdll/unix/env.c
+@@ -341,7 +341,9 @@ static BOOL is_special_env_var( const char *var )
+             STARTS_WITH( var, "TEMP=" ) ||
+             STARTS_WITH( var, "TMP=" ) ||
+             STARTS_WITH( var, "QT_" ) ||
+-            STARTS_WITH( var, "VK_" ));
++            STARTS_WITH( var, "SDL_AUDIODRIVER=" ) ||
++            STARTS_WITH( var, "VK_" ) ||
++            STARTS_WITH( var, "XDG_SESSION_TYPE=" ));
+ }
+ 
+ /* check if an environment variable changes dynamically in every new process */
+@@ -801,9 +803,16 @@ static void init_locale(void)
+     const NLS_LOCALE_DATA *locale;
+     char *p;
+ 
++#ifdef __ANDROID__
++    const char *all = getenv( "LC_ALL" );
++    if (!all) all = "C.UTF-8";
++    if (!unix_to_win_locale( all, system_locale )) system_locale[0] = 0;
++    if (!unix_to_win_locale( all, user_locale )) user_locale[0] = 0;
++#else
+     setlocale( LC_ALL, "" );
+     if (!unix_to_win_locale( setlocale( LC_CTYPE, NULL ), system_locale )) system_locale[0] = 0;
+     if (!unix_to_win_locale( setlocale( LC_MESSAGES, NULL ), user_locale )) user_locale[0] = 0;
++#endif
+ 
+ #ifdef __APPLE__
+     if (!system_locale[0])
+-- 
+2.53.0.windows.2
+

@@ -1,0 +1,27 @@
+From 797daa981f3d47b7efc9971363f7bb821920bc8a Mon Sep 17 00:00:00 2001
+From: Etaash Mathamsetty
+ <45927311+Etaash-mathamsetty@users.noreply.github.com>
+Date: Sat, 7 Jun 2025 22:52:48 -0400
+Subject: [PATCH 087/177] fixup! winebus: Allow disabling steam input
+ seperately
+
+---
+ dlls/winebus.sys/bus_udev.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/winebus.sys/bus_udev.c b/dlls/winebus.sys/bus_udev.c
+index 482a446d299..88e9dc1f146 100644
+--- a/dlls/winebus.sys/bus_udev.c
++++ b/dlls/winebus.sys/bus_udev.c
+@@ -1655,7 +1655,7 @@ static void udev_add_device(struct udev_device *dev, int fd)
+         char *env = getenv("PROTON_NO_STEAMINPUT");
+         if (env && !strcmp(env, "1"))
+         {
+-            TRACE("evdev %s: gnoring steam input virtual controller\n", debugstr_a(devnode));
++            TRACE("evdev %s: ignoring steam input virtual controller\n", debugstr_a(devnode));
+             close(fd);
+             return;
+         }
+-- 
+2.50.0
+
