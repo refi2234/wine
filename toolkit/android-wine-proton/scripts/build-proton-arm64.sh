@@ -219,6 +219,7 @@ if [[ $SKIP_CONFIGURE -eq 0 && $SKIP_TOOLS -eq 0 ]]; then
         cd "$BUILD_DIR/host"
         env -u CC -u CXX "$SOURCE_DIR/configure" \
             --enable-win64 \
+            --disable-nls \
             --without-x \
             --without-freetype \
             --without-gnutls \
@@ -234,6 +235,8 @@ if [[ $SKIP_CONFIGURE -eq 0 && $SKIP_TOOLS -eq 0 ]]; then
             --without-gphoto \
             --without-udev \
             --without-capi \
+            --without-gettext \
+            --with-gettextpo=no \
             --without-ffmpeg \
             2>&1
     )
@@ -271,6 +274,7 @@ if [[ $SKIP_CONFIGURE -eq 0 ]]; then
             --bindir="$PREFIX/bin" \
             --libdir="$PREFIX/lib" \
             --enable-archs=aarch64,i386 \
+            --disable-nls \
             --without-x \
             --without-freetype \
             --without-gnutls \
@@ -288,6 +292,8 @@ if [[ $SKIP_CONFIGURE -eq 0 ]]; then
             --without-gphoto \
             --without-udev \
             --without-capi \
+            --without-gettext \
+            --with-gettextpo=no \
             --without-ffmpeg \
             CC="$CC" \
             CXX="$CXX" \
