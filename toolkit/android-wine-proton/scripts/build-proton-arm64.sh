@@ -104,6 +104,15 @@ fi
 
 # --- Source validation ---
 [[ -d "$SOURCE_DIR" ]] || die "Wine source not found: $SOURCE_DIR. Run: git clone <wine-android-repo> $SOURCE_DIR"
+if [[ ! -f "$SOURCE_DIR/configure" ]]; then
+    if [[ -f "$SOURCE_DIR/autogen.sh" ]]; then
+        log "configure missing; running autogen.sh"
+        (
+            cd "$SOURCE_DIR"
+            bash autogen.sh
+        ) || die "autogen.sh failed in $SOURCE_DIR"
+    fi
+fi
 [[ -f "$SOURCE_DIR/configure" ]] || die "configure not found in $SOURCE_DIR"
 
 # Keep local builds aligned with the workflow patch set for Winlator container exit.
