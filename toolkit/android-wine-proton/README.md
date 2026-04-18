@@ -16,6 +16,7 @@ Manual dispatch supports:
 - `build_target`: `proton`, `wine`, or `both`
 - `proton_ref`, `gamenative_ref`
 - `wine_repo`, `wine_ref`
+- `wine_version_label`, `wine_version_code`
 - `target_app_id`
 - `force_build`
 - optional Proton patch toggles like `enable_ntsync`, `extra_winebus_patches`, `ge_perf_second_pass`, `ge_compat_patch_bundle`

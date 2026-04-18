@@ -50,6 +50,16 @@ on:
         required: false
         default: master
         type: string
+      wine_version_label:
+        description: Version label to use for plain Wine artifacts and profile names
+        required: false
+        default: wine-bionic
+        type: string
+      wine_version_code:
+        description: Version code to use inside the plain Wine profile
+        required: false
+        default: "1"
+        type: string
       release_description:
         description: Optional extra text for the release notes
         required: false
@@ -441,8 +451,8 @@ jobs:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.2.12479018
           LLVM_MINGW_ROOT: /opt/llvm-mingw
           TERMUX_DEPS_PREFIX: /data/data/com.termux/files/usr
-          PROFILE_VERSION: wine-bionic
-          PROFILE_VERSION_CODE: 1
+          PROFILE_VERSION: ${{ github.event.inputs.wine_version_label || 'wine-bionic' }}
+          PROFILE_VERSION_CODE: ${{ github.event.inputs.wine_version_code || '1' }}
           WINLATOR_APP_ID: ${{ github.event.inputs.target_app_id || 'app.gamenative' }}
         run: |
           bash "$TOOLKIT_DIR/scripts/build-wine-bionic.sh" --source-dir "$GITHUB_WORKSPACE/wine-source" --build-dir "$GITHUB_WORKSPACE/wine-build"
