@@ -136,15 +136,22 @@ if [[ $ENABLE_NTSYNC -eq 1 ]]; then
            "$NTSYNC_PATCH_DIR/$ntsync_patch"
     done
     python3 "$SCRIPT_DIR/strip_generated_ntsync_patch_sections.py" "$NTSYNC_PATCH_DIR"/*.patch
-    python3 "$SCRIPT_DIR/fix_ntsync_chain.py" "$SOURCE_DIR"
-    bash "$SCRIPT_DIR/apply_patch_series.sh" \
-        "$SOURCE_DIR" \
-        "$NTSYNC_PATCH_DIR/0163-ntdll-Retrieve-and-cache-an-ntsync-device-in-wait-ca.patch" \
-        "$NTSYNC_PATCH_DIR/0164-server-Add-an-object-operation-to-retrieve-an-in-pro.patch" \
-        "$NTSYNC_PATCH_DIR/0165-ntsync-implementation.patch" \
-        "$NTSYNC_PATCH_DIR/0166-Finish-up-ntsync-console-implementation.patch" \
-        "$NTSYNC_PATCH_DIR/0172-ntdll-ntsync-remove-unused-variable-fix-datatypes.patch"
-    python3 "$SCRIPT_DIR/fix_ntsync.py" "$SOURCE_DIR"
+    if python3 "$SCRIPT_DIR/fix_ntsync_chain.py" "$SOURCE_DIR"; then
+        if bash "$SCRIPT_DIR/apply_patch_series.sh" \
+            "$SOURCE_DIR" \
+            "$NTSYNC_PATCH_DIR/0163-ntdll-Retrieve-and-cache-an-ntsync-device-in-wait-ca.patch" \
+            "$NTSYNC_PATCH_DIR/0164-server-Add-an-object-operation-to-retrieve-an-in-pro.patch" \
+            "$NTSYNC_PATCH_DIR/0165-ntsync-implementation.patch" \
+            "$NTSYNC_PATCH_DIR/0166-Finish-up-ntsync-console-implementation.patch" \
+            "$NTSYNC_PATCH_DIR/0172-ntdll-ntsync-remove-unused-variable-fix-datatypes.patch"; then
+            python3 "$SCRIPT_DIR/fix_ntsync.py" "$SOURCE_DIR"
+            log "Applied optional ntsync patch series"
+        else
+            log "WARNING: optional ntsync patch series failed to apply; continuing without ntsync"
+        fi
+    else
+        log "WARNING: optional ntsync drift fix failed; continuing without ntsync"
+    fi
 fi
 
 if [[ $ENABLE_GE_PERF -eq 1 ]]; then
