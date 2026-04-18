@@ -6,7 +6,8 @@ Main build kit location:
 
 GitHub Actions workflow:
 
-- `.github/workflows/android-wine-proton.yml`
+- `.github/workflows/android-proton-nightlies.yml`
+- `.github/workflows/android-wine-nightlies.yml`
 
 Detailed docs:
 

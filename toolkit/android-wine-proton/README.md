@@ -5,21 +5,26 @@ GitHub Actions pipeline for two Android build flows in one repo:
 - `proton`: Proton-based Android/ARM64EC build using Valve Proton plus the GameNative Android layer and optional GE-style extras.
 - `wine`: plain Wine Android `x86_64` build with the March 4, 2026 `REF4IK/wine-bionic` source patch set.
 
-## Workflow
+## Workflows
 
-Main workflow: `.github/workflows/android-wine-proton.yml`
+- `.github/workflows/android-proton-nightlies.yml`
+- `.github/workflows/android-wine-nightlies.yml`
 
-All supporting files for that workflow live under `toolkit/android-wine-proton/`.
+All supporting files for both workflows live under `toolkit/android-wine-proton/`.
 
-Manual dispatch supports:
+Manual dispatch for Proton supports:
 
-- `build_target`: `proton`, `wine`, or `both`
 - `proton_ref`, `gamenative_ref`
+- `target_app_id`
+- `force_build`
+- optional Proton patch toggles like `enable_ntsync`, `extra_winebus_patches`, `ge_perf_second_pass`, `ge_compat_patch_bundle`
+
+Manual dispatch for plain Wine supports:
+
 - `wine_repo`, `wine_ref`
 - `wine_version_label`, `wine_version_code`
 - `target_app_id`
 - `force_build`
-- optional Proton patch toggles like `enable_ntsync`, `extra_winebus_patches`, `ge_perf_second_pass`, `ge_compat_patch_bundle`
 
 ## Local Script Layout
 

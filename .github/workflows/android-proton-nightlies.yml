@@ -1,0 +1,311 @@
+name: Android Proton Nightlies
+
+on:
+  schedule:
+    - cron: "20 1 * * *"
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner to use
+        required: false
+        default: ubuntu-24.04
+        type: choice
+        options:
+          - ubuntu-24.04
+          - self-hosted
+      target_app_id:
+        description: Target Android app id for package paths
+        required: false
+        default: app.gamenative
+        type: choice
+        options:
+          - app.gamenative
+          - com.winlator.cmod
+      proton_ref:
+        description: Valve Proton ref
+        required: false
+        default: proton_11.0
+        type: string
+      gamenative_ref:
+        description: GameNative proton-wine ref
+        required: false
+        default: proton_10.0
+        type: string
+      release_description:
+        description: Optional extra text for the release notes
+        required: false
+        default: ""
+        type: string
+      disable_gamenative_patches:
+        description: Disable GameNative feature patch stack for Proton
+        required: false
+        default: false
+        type: boolean
+      force_build:
+        description: Force a build even if the tracked upstream hash is unchanged
+        required: false
+        default: false
+        type: boolean
+      extra_winebus_patches:
+        description: Enable optional GE winebus patches
+        required: false
+        default: false
+        type: boolean
+      ge_perf_second_pass:
+        description: Enable optional GE performance patches
+        required: false
+        default: false
+        type: boolean
+      ge_compat_patch_bundle:
+        description: Enable optional GE compatibility patches
+        required: false
+        default: false
+        type: boolean
+      enable_ntsync:
+        description: Enable optional ntsync patches
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  TOOLKIT_DIR: toolkit/android-wine-proton
+
+jobs:
+  prepare:
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-24.04' }}
+    outputs:
+      proton_skip: ${{ steps.plan.outputs.proton_skip }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Resolve Proton build plan
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          FORCE_BUILD="${{ github.event.inputs.force_build || 'false' }}"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("toolkit/android-wine-proton/latest.json")
+          if not path.exists():
+              path.write_text(json.dumps({"artifacts": {"proton": {}, "wine": {}}}, indent=2) + "\n", encoding="utf-8")
+          PY
+          rm -rf proton-source
+          PROTON_REF="${{ github.event.inputs.proton_ref || 'proton_11.0' }}"
+          git clone --depth=1 https://github.com/ValveSoftware/Proton proton-source
+          git -C proton-source fetch --depth=1 origin "$PROTON_REF"
+          git -C proton-source checkout FETCH_HEAD
+          PROTON_HASH="$(git -C proton-source ls-tree HEAD wine | awk '{print $3}' | cut -c1-7)"
+          PREV_PROTON_HASH="$(python3 -c 'import json; from pathlib import Path; data = json.loads(Path("toolkit/android-wine-proton/latest.json").read_text(encoding="utf-8")); print(data.get("artifacts", {}).get("proton", {}).get("gitHash", ""))')"
+          PROTON_SKIP=true
+          if [ "$FORCE_BUILD" = true ] || [ "$PROTON_HASH" != "$PREV_PROTON_HASH" ]; then
+            PROTON_SKIP=false
+          fi
+          rm -rf proton-source
+          echo "proton_skip=$PROTON_SKIP" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.proton_skip != 'true'
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-24.04' }}
+    timeout-minutes: 360
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h
+
+      - name: Set up build dependencies
+        shell: bash
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential git wget curl unzip flex bison gettext autoconf automake \
+            libtool pkg-config mingw-w64 gcc-multilib g++-multilib patch zstd xz-utils \
+            python3-zstandard ccache libfontconfig1-dev libfontconfig1-dev:i386 \
+            libfreetype6-dev libfreetype6-dev:i386 libpng-dev libpng-dev:i386 \
+            zlib1g-dev zlib1g-dev:i386
+
+      - name: Clone Proton source
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROTON_REF="${{ github.event.inputs.proton_ref || 'proton_11.0' }}"
+          git clone --depth=1 https://github.com/ValveSoftware/Proton proton-source
+          git -C proton-source fetch --depth=1 origin "$PROTON_REF"
+          git -C proton-source checkout FETCH_HEAD
+          WINE_URL="$(git -C proton-source config --file .gitmodules --get submodule.wine.url)"
+          case "$WINE_URL" in
+            ../*) WINE_URL="https://github.com/ValveSoftware/${WINE_URL#../}.git" ;;
+            ./*) WINE_URL="https://github.com/ValveSoftware/${WINE_URL#./}.git" ;;
+          esac
+          WINE_COMMIT="$(git -C proton-source ls-tree HEAD wine | awk '{print $3}')"
+          git clone --depth=1 "$WINE_URL" wine-source || git clone "$WINE_URL" wine-source
+          git -C wine-source fetch --depth=1 origin "$WINE_COMMIT"
+          git -C wine-source checkout FETCH_HEAD
+          rm -rf proton-source
+
+      - name: Clone GameNative android layer
+        shell: bash
+        run: |
+          set -euo pipefail
+          GN_REF="${{ github.event.inputs.gamenative_ref || 'proton_10.0' }}"
+          git clone --depth=1 https://github.com/GameNative/proton-wine gamenative-src
+          git -C gamenative-src fetch --depth=1 origin "$GN_REF"
+          git -C gamenative-src checkout FETCH_HEAD
+          cp -r gamenative-src/android wine-source/android
+          cp -r gamenative-src/build-scripts wine-source/build-scripts
+          rm -rf gamenative-src
+
+      - name: Prepare Proton patch stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$TOOLKIT_DIR/scripts/fix_preloader_r_debug_noise.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_opengl_c.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_loader_c.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_virtual_c.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_unix_virtual_c.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_window_c.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_wineboot_c.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_wdscore.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_fsync.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_mouse_c.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_x11drv_h.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/fix_x11drv_main_c.py" wine-source
+          python3 "$TOOLKIT_DIR/scripts/filter_patches.py" wine-source/build-scripts/build-step-arm64ec.sh wine-source
+          python3 "$TOOLKIT_DIR/scripts/patch_build_script.py" wine-source/build-scripts/build-step-arm64ec.sh
+
+      - name: Download Termux runtime and prefix pack
+        shell: bash
+        run: |
+          mkdir -p "$HOME/termuxfs" "$TOOLKIT_DIR/scripts/reference/extracted"
+          wget -q "https://github.com/GameNative/termux-on-gha/releases/download/build-20260218/termuxfs-aarch64.tar" -O "$HOME/termuxfs/termuxfs-aarch64.tar"
+          tar -xf "$HOME/termuxfs/termuxfs-aarch64.tar" -C "$HOME/termuxfs"
+          sudo mv "$HOME/termuxfs/data" / || true
+          sudo chown -R "$(id -u):$(id -g)" /data
+          wget -q "https://github.com/GameNative/bionic-prefix-files/raw/main/prefixPack-arm64ec.txz" -O "$TOOLKIT_DIR/scripts/reference/extracted/prefixPack.txz"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27d
+          add-to-path: false
+          link-to-sdk: true
+
+      - name: Set up LLVM MinGW
+        shell: bash
+        run: |
+          wget -q https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64.tar.xz
+          tar -xf llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64.tar.xz
+          sudo mv llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64 /opt/llvm-mingw
+          sudo chown -R "$(id -u):$(id -g)" /opt/llvm-mingw
+          echo "/opt/llvm-mingw/bin" >> "$GITHUB_PATH"
+
+      - name: Build Proton ARM64EC package
+        shell: bash
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.2.12479018
+          PROFILE_VERSION: 11-arm64ec
+          PROFILE_VERSION_CODE: 1
+          WINLATOR_APP_ID: ${{ github.event.inputs.target_app_id || 'app.gamenative' }}
+        run: |
+          EXTRA_ARGS=()
+          if [ "${{ github.event.inputs.enable_ntsync || 'false' }}" = "true" ]; then EXTRA_ARGS+=(--enable-ntsync); fi
+          if [ "${{ github.event.inputs.ge_perf_second_pass || 'false' }}" = "true" ]; then EXTRA_ARGS+=(--enable-ge-perf); fi
+          if [ "${{ github.event.inputs.ge_compat_patch_bundle || 'false' }}" = "true" ]; then EXTRA_ARGS+=(--enable-ge-compat); fi
+          bash "$TOOLKIT_DIR/scripts/build-proton-arm64.sh" --source-dir "$GITHUB_WORKSPACE/wine-source" --build-dir "$GITHUB_WORKSPACE/wine-build" "${EXTRA_ARGS[@]}"
+
+      - name: Upload Proton artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: proton-artifacts
+          path: |
+            output/*.wcp
+            output/*.sha256
+
+  release:
+    needs:
+      - prepare
+      - build
+    if: needs.build.result == 'success'
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-24.04' }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: proton-artifacts
+          path: artifacts/proton
+
+      - name: Prepare release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \( -name "*.wcp" -o -name "*.sha256" \) -exec cp {} release/ \;
+          RELEASE_TAG="android-proton-${{ github.run_number }}-$(date -u +%Y%m%d)"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update latest.json
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          latest_path = Path("toolkit/android-wine-proton/latest.json")
+          data = json.loads(latest_path.read_text(encoding="utf-8"))
+          data.setdefault("artifacts", {})
+          release_tag = "${{ steps.meta.outputs.release_tag }}"
+          proton_files = list(Path("release").glob("proton-*.wcp"))
+          if proton_files:
+              proton_file = proton_files[0]
+              parts = proton_file.stem.split("-")
+              data["artifacts"]["proton"] = {
+                  "versionName": proton_file.stem,
+                  "date": parts[-3],
+                  "gitHash": parts[-2],
+                  "fileName": proton_file.name,
+                  "sha256": hashlib.sha256(proton_file.read_bytes()).hexdigest(),
+                  "releaseTag": release_tag,
+              }
+          latest_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          NOTES="Automated Android Proton build run ${{ github.run_number }}."
+          EXTRA="${{ github.event.inputs.release_description || '' }}"
+          if [ -n "$EXTRA" ]; then NOTES="$NOTES"$'\n\n'"$EXTRA"; fi
+          gh release create "${{ steps.meta.outputs.release_tag }}" release/* --title "${{ steps.meta.outputs.release_tag }}" --notes "$NOTES" --prerelease \
+            || gh release upload "${{ steps.meta.outputs.release_tag }}" release/* --clobber
+
+      - name: Commit latest.json
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$TOOLKIT_DIR/latest.json"
+          git diff --staged --quiet || git commit -m "chore: update proton latest.json for run ${{ github.run_number }}"
+          git push
