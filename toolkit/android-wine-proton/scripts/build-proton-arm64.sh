@@ -156,22 +156,30 @@ fi
 
 if [[ $ENABLE_GE_PERF -eq 1 ]]; then
     log "Applying optional GE performance patch bundle"
-    bash "$SCRIPT_DIR/apply_patch_series.sh" \
+    if bash "$SCRIPT_DIR/apply_patch_series.sh" \
         "$SOURCE_DIR" \
         "$SCRIPT_DIR/../ge-second-pass/performance/6559c43-ntdll-validate-fd-type-in-ioctl-afd-wine-complete-async.patch" \
         "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/wine-hotfixes/wine-wayland/0113-opengl32-Improve-wow64-mapping-performance-by-20x.patch" \
         "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/wine-hotfixes/wine-wayland/0114-HACK-opengl32-Reuse-allocated-memory.patch" \
         "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/wine-hotfixes/wine-wayland/0115-fixup-opengl32-Support-map-buffer-offsets.patch" \
-        "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/wine-hotfixes/wine-wayland/0127-opengl32-Use-VirtualAlloc-instead-of-NtAllocateVirtu.patch"
+        "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/wine-hotfixes/wine-wayland/0127-opengl32-Use-VirtualAlloc-instead-of-NtAllocateVirtu.patch"; then
+        log "Applied optional GE performance patch bundle"
+    else
+        log "WARNING: optional GE performance patch bundle failed; continuing without GE perf patches"
+    fi
 fi
 
 if [[ $ENABLE_GE_COMPAT -eq 1 ]]; then
     log "Applying optional GE compatibility patch bundle"
-    bash "$SCRIPT_DIR/apply_patch_series.sh" \
+    if bash "$SCRIPT_DIR/apply_patch_series.sh" \
         "$SOURCE_DIR" \
         "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/proton/fix-a-crash-in-ID2D1DeviceContext-if-no-target-is-set.patch" \
         "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/proton/0001-win32u-add-env-switch-to-disable-wm-decorations.patch" \
-        "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/wine-hotfixes/pending/registry_RRF_RT_REG_SZ-RRF_RT_REG_EXPAND_SZ.patch"
+        "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/wine-hotfixes/pending/registry_RRF_RT_REG_SZ-RRF_RT_REG_EXPAND_SZ.patch"; then
+        log "Applied optional GE compatibility patch bundle"
+    else
+        log "WARNING: optional GE compatibility patch bundle failed; continuing without GE compatibility patches"
+    fi
 fi
 
 # --- Clean if requested ---
