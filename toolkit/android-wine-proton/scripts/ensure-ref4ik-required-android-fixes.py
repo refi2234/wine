@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
+import re
 import sys
 
 
@@ -11,20 +12,22 @@ def ensure_pulse_fix(source_dir: Path) -> str:
     if "#ifndef __ANDROID__" in text and "pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);" in text:
         return "pulse: already guarded for Android"
 
-    original = """    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
-    if (pthread_mutex_init(&pulse_mutex, &attr) != 0)
-"""
-    replacement = """    pthread_mutexattr_init(&attr);
-#ifndef __ANDROID__
-    pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
-#endif
-    if (pthread_mutex_init(&pulse_mutex, &attr) != 0)
-"""
-    if original not in text:
-        raise RuntimeError(f"pulse: expected block not found in {path}")
+    pattern = re.compile(
+        r'(?P<indent>\s*)pthread_mutexattr_setprotocol\(&attr,\s*PTHREAD_PRIO_INHERIT\);\n',
+        re.MULTILINE,
+    )
+    match = pattern.search(text)
+    if not match:
+        raise RuntimeError(f"pulse: pthread_mutexattr_setprotocol call not found in {path}")
 
-    path.write_text(text.replace(original, replacement, 1), encoding="utf-8")
+    indent = match.group("indent")
+    replacement = (
+        f"{indent}#ifndef __ANDROID__\n"
+        f"{indent}pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);\n"
+        f"{indent}#endif\n"
+    )
+    text = text[: match.start()] + replacement + text[match.end() :]
+    path.write_text(text, encoding="utf-8")
     return "pulse: added Android guard around pthread_mutexattr_setprotocol"
 
 
@@ -35,25 +38,31 @@ def ensure_locale_fix(source_dir: Path) -> str:
     if '#ifdef __ANDROID__\n    const char *all = getenv( "LC_ALL" );' in text:
         return "locale: Android locale workaround already present"
 
-    original = """    setlocale( LC_ALL, "" );
-    if (!unix_to_win_locale( setlocale( LC_CTYPE, NULL ), system_locale )) system_locale[0] = 0;
-    if (!unix_to_win_locale( setlocale( LC_MESSAGES, NULL ), user_locale )) user_locale[0] = 0;
-"""
-    replacement = """#ifdef __ANDROID__
-    const char *all = getenv( "LC_ALL" );
-    if (!all) all = "C.UTF-8";
-    if (!unix_to_win_locale( all, system_locale )) system_locale[0] = 0;
-    if (!unix_to_win_locale( all, user_locale )) user_locale[0] = 0;
-#else
-    setlocale( LC_ALL, "" );
-    if (!unix_to_win_locale( setlocale( LC_CTYPE, NULL ), system_locale )) system_locale[0] = 0;
-    if (!unix_to_win_locale( setlocale( LC_MESSAGES, NULL ), user_locale )) user_locale[0] = 0;
-#endif
-"""
-    if original not in text:
-        raise RuntimeError(f"locale: expected block not found in {path}")
+    pattern = re.compile(
+        r'(?P<indent>\s*)setlocale\( LC_ALL, "" \);\n'
+        r'(?P=indent)if \(!unix_to_win_locale\( setlocale\( LC_CTYPE, NULL \), system_locale \)\) system_locale\[0\] = 0;\n'
+        r'(?P=indent)if \(!unix_to_win_locale\( setlocale\( LC_MESSAGES, NULL \), user_locale \)\) user_locale\[0\] = 0;\n',
+        re.MULTILINE,
+    )
+    match = pattern.search(text)
+    if not match:
+        raise RuntimeError(f"locale: expected locale init block not found in {path}")
 
-    path.write_text(text.replace(original, replacement, 1), encoding="utf-8")
+    indent = match.group("indent")
+    replacement = (
+        f"{indent}#ifdef __ANDROID__\n"
+        f'{indent}const char *all = getenv( "LC_ALL" );\n'
+        f'{indent}if (!all) all = "C.UTF-8";\n'
+        f"{indent}if (!unix_to_win_locale( all, system_locale )) system_locale[0] = 0;\n"
+        f"{indent}if (!unix_to_win_locale( all, user_locale )) user_locale[0] = 0;\n"
+        f"{indent}#else\n"
+        f'{indent}setlocale( LC_ALL, "" );\n'
+        f"{indent}if (!unix_to_win_locale( setlocale( LC_CTYPE, NULL ), system_locale )) system_locale[0] = 0;\n"
+        f"{indent}if (!unix_to_win_locale( setlocale( LC_MESSAGES, NULL ), user_locale )) user_locale[0] = 0;\n"
+        f"{indent}#endif\n"
+    )
+    text = text[: match.start()] + replacement + text[match.end() :]
+    path.write_text(text, encoding="utf-8")
     return "locale: added Android locale workaround"
 
 
