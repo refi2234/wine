@@ -76,6 +76,11 @@ run_step() {
         log "Step finished: $name"
     else
         log "Step failed: $name"
+        if grep -n -m 20 "error:" "$step_log" >/tmp/wine-step-errors.$$ 2>/dev/null; then
+            log "First compiler/tool errors from $name:"
+            cat /tmp/wine-step-errors.$$ 
+        fi
+        rm -f /tmp/wine-step-errors.$$
         tail -n 200 "$step_log"
         exit 1
     fi
