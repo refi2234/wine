@@ -9,31 +9,21 @@ def ensure_pulse_fix(source_dir: Path) -> str:
     path = source_dir / "dlls" / "winepulse.drv" / "pulse.c"
     text = path.read_text(encoding="utf-8")
 
-    guarded_protocol = (
-        "#ifndef __ANDROID__" in text
-        and "pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);" in text
-    )
-    guarded_robust = (
-        "#ifndef __ANDROID__" in text
-        and "pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);" in text
-    )
-    if guarded_protocol or guarded_robust:
+    if re.search(
+        r"#ifndef __ANDROID__\s*"
+        r"pthread_mutexattr_set(?:protocol|robust)\s*\(\s*&attr\s*,.*?\);\s*"
+        r"#endif",
+        text,
+        flags=re.S,
+    ):
         return "pulse: already guarded for Android"
 
-    protocol_pattern = re.compile(
-        r'(?P<indent>\s*)pthread_mutexattr_setprotocol\(&attr,\s*PTHREAD_PRIO_INHERIT\);\n',
+    call_pattern = re.compile(
+        r'(?P<indent>^[ \t]*)'
+        r'(?P<call>pthread_mutexattr_set(?:protocol|robust)\s*\(\s*&attr\s*,.*?\);)[ \t]*$',
         re.MULTILINE,
     )
-    robust_pattern = re.compile(
-        r'(?P<indent>\s*)pthread_mutexattr_setrobust\(&attr,\s*PTHREAD_MUTEX_ROBUST\);\n',
-        re.MULTILINE,
-    )
-
-    match = protocol_pattern.search(text)
-    replacement_line = "pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);"
-    if not match:
-        match = robust_pattern.search(text)
-        replacement_line = "pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);"
+    match = call_pattern.search(text)
 
     if not match:
         raise RuntimeError(
@@ -41,6 +31,7 @@ def ensure_pulse_fix(source_dir: Path) -> str:
         )
 
     indent = match.group("indent")
+    replacement_line = match.group("call")
     replacement = (
         f"{indent}#ifndef __ANDROID__\n"
         f"{indent}{replacement_line}\n"
