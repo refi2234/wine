@@ -45,6 +45,9 @@ while IFS=$'\t' read -r patch_id description url; do
         applied_ids+=("$patch_id")
     else
         echo "WARNING: skipping extra patch that failed to apply cleanly: $patch_id"
+        git -C "$SOURCE_DIR" reset --hard HEAD >/dev/null 2>&1 || true
+        git -C "$SOURCE_DIR" clean -fd >/dev/null 2>&1 || true
+        echo "Restored source tree after failed extra patch: $patch_id"
         skipped=$((skipped + 1))
         skipped_ids+=("$patch_id")
     fi
