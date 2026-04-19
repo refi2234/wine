@@ -29,6 +29,7 @@ done
 
 [[ -n "$NDK_PATH" ]] || { echo "ANDROID_NDK_HOME is required" >&2; exit 1; }
 [[ -d "$SOURCE_DIR" ]] || { echo "Missing source dir: $SOURCE_DIR" >&2; exit 1; }
+[[ -d "$LLVM_MINGW_ROOT/bin" ]] || { echo "Missing llvm-mingw dir: $LLVM_MINGW_ROOT/bin" >&2; exit 1; }
 
 TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
 TARGET="${TARGET_ARCH}-linux-android"
@@ -38,6 +39,7 @@ AR="$TOOLCHAIN/llvm-ar"
 RANLIB="$TOOLCHAIN/llvm-ranlib"
 STRIP="$TOOLCHAIN/llvm-strip"
 DLLTOOL="$LLVM_MINGW_ROOT/bin/llvm-dlltool"
+export PATH="$LLVM_MINGW_ROOT/bin:$PATH"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/host" "$BUILD_DIR/target" "$BUILD_DIR/install" output
@@ -71,6 +73,7 @@ run_in_dir() {
 }
 
 log "Full log: $LOG_FILE"
+log "Using llvm-mingw from: $LLVM_MINGW_ROOT/bin"
 run_in_dir prepare-build-system "$SOURCE_DIR" "./tools/make_requests && ./tools/make_specfiles && ./tools/make_makefiles && autoreconf -f"
 
 run_step configure-host-tools env -u CC -u CXX -u CPPFLAGS -u CFLAGS -u CXXFLAGS -u LDFLAGS -u PKG_CONFIG_LIBDIR -u ACLOCAL_PATH \
@@ -111,7 +114,7 @@ PREFIX="/data/data/${APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-${TARGET_ARCH}
 run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \"$SOURCE_DIR/configure\" \
         --host="$TARGET" \
         --with-wine-tools="$BUILD_DIR/host" \
-        --with-mingw=clang \
+        --with-mingw=\"$LLVM_MINGW_ROOT/bin/clang\" \
         --without-ldap \
         --without-oss \
         --disable-win16 \
