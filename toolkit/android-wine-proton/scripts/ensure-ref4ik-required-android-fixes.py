@@ -9,37 +9,27 @@ def ensure_pulse_fix(source_dir: Path) -> str:
     path = source_dir / "dlls" / "winepulse.drv" / "pulse.c"
     text = path.read_text(encoding="utf-8")
 
-    if re.search(
-        r"#ifndef __ANDROID__\s*"
-        r"pthread_mutexattr_set(?:protocol|robust)\s*\(\s*&attr\s*,.*?\);\s*"
-        r"#endif",
-        text,
-        flags=re.S,
-    ):
-        return "pulse: already guarded for Android"
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if "pthread_mutexattr_setprotocol" not in line and "pthread_mutexattr_setrobust" not in line:
+            continue
 
-    call_pattern = re.compile(
-        r'(?P<indent>^[ \t]*)'
-        r'(?P<call>pthread_mutexattr_set(?:protocol|robust)\s*\(\s*&attr\s*,.*?\);)[ \t]*$',
-        re.MULTILINE,
-    )
-    match = call_pattern.search(text)
+        prev_line = lines[i - 1].strip() if i > 0 else ""
+        next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
+        if prev_line == "#ifndef __ANDROID__" and next_line == "#endif":
+            return "pulse: already guarded for Android"
 
-    if not match:
-        raise RuntimeError(
-            f"pulse: supported mutex attribute call not found in {path}"
-        )
+        indent = re.match(r"^[ \t]*", line).group(0)
+        replacement = [
+            f"{indent}#ifndef __ANDROID__",
+            line,
+            f"{indent}#endif",
+        ]
+        lines[i:i + 1] = replacement
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return f"pulse: added Android guard around {line.strip()}"
 
-    indent = match.group("indent")
-    replacement_line = match.group("call")
-    replacement = (
-        f"{indent}#ifndef __ANDROID__\n"
-        f"{indent}{replacement_line}\n"
-        f"{indent}#endif\n"
-    )
-    text = text[: match.start()] + replacement + text[match.end() :]
-    path.write_text(text, encoding="utf-8")
-    return f"pulse: added Android guard around {replacement_line}"
+    raise RuntimeError(f"pulse: supported mutex attribute call not found in {path}")
 
 
 def ensure_locale_fix(source_dir: Path) -> str:
