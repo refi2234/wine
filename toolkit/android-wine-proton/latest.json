@@ -1,6 +1,15 @@
 {
   "artifacts": {
     "proton": {},
-    "wine": {}
+    "wine": {
+      "versionName": "wine-9.11-x86_64-20240614-63e25f9e",
+      "date": "20240614",
+      "gitHash": "63e25f9e",
+      "tarFileName": "wine-9.11-x86_64-20240614-63e25f9e.tar.xz",
+      "tarSha256": "f412599b59390daab453793b50dafe60331a54e83718f9b63d2090037594b1ee",
+      "releaseTag": "android-wine-24-20260419",
+      "fileName": "wine-9.11-x86_64-20240614-63e25f9e.wcp",
+      "sha256": "e02f6c856fe7e50da25712371c8e1a9cf791ee4861515b3733022e49521b7611"
+    }
   }
 }
