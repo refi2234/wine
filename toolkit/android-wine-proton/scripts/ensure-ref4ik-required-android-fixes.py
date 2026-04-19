@@ -9,26 +9,46 @@ def ensure_pulse_fix(source_dir: Path) -> str:
     path = source_dir / "dlls" / "winepulse.drv" / "pulse.c"
     text = path.read_text(encoding="utf-8")
 
-    if "#ifndef __ANDROID__" in text and "pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);" in text:
+    guarded_protocol = (
+        "#ifndef __ANDROID__" in text
+        and "pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);" in text
+    )
+    guarded_robust = (
+        "#ifndef __ANDROID__" in text
+        and "pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);" in text
+    )
+    if guarded_protocol or guarded_robust:
         return "pulse: already guarded for Android"
 
-    pattern = re.compile(
+    protocol_pattern = re.compile(
         r'(?P<indent>\s*)pthread_mutexattr_setprotocol\(&attr,\s*PTHREAD_PRIO_INHERIT\);\n',
         re.MULTILINE,
     )
-    match = pattern.search(text)
+    robust_pattern = re.compile(
+        r'(?P<indent>\s*)pthread_mutexattr_setrobust\(&attr,\s*PTHREAD_MUTEX_ROBUST\);\n',
+        re.MULTILINE,
+    )
+
+    match = protocol_pattern.search(text)
+    replacement_line = "pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);"
     if not match:
-        raise RuntimeError(f"pulse: pthread_mutexattr_setprotocol call not found in {path}")
+        match = robust_pattern.search(text)
+        replacement_line = "pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);"
+
+    if not match:
+        raise RuntimeError(
+            f"pulse: supported mutex attribute call not found in {path}"
+        )
 
     indent = match.group("indent")
     replacement = (
         f"{indent}#ifndef __ANDROID__\n"
-        f"{indent}pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);\n"
+        f"{indent}{replacement_line}\n"
         f"{indent}#endif\n"
     )
     text = text[: match.start()] + replacement + text[match.end() :]
     path.write_text(text, encoding="utf-8")
-    return "pulse: added Android guard around pthread_mutexattr_setprotocol"
+    return f"pulse: added Android guard around {replacement_line}"
 
 
 def ensure_locale_fix(source_dir: Path) -> str:
