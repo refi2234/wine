@@ -135,6 +135,7 @@ bash "$SCRIPT_DIR/apply_patch_series.sh" \
     "$SCRIPT_DIR/../patches/ge-gamenative-firstpass/explorer/explorer_startmenu_shutdown_latch.patch" \
     "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/proton/build_failure_prevention-add-nls.patch"
 python3 "$SCRIPT_DIR/fix_preloader_r_debug_noise.py" "$SOURCE_DIR"
+python3 "$SCRIPT_DIR/fix_wineandroid_init_c.py" "$SOURCE_DIR"
 bash "$SCRIPT_DIR/disable-unsupported-proton-dlls.sh" "$SOURCE_DIR"
 
 if [[ $ENABLE_NTSYNC -eq 1 ]]; then
