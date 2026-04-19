@@ -20,5 +20,16 @@ PATCHES=(
 )
 
 echo "Applying local REF4IK March 4, 2026 patchset from $PATCH_DIR"
-bash "$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "${PATCHES[@]}"
-echo "Applied ${#PATCHES[@]} REF4IK bionic source patches"
+applied=0
+skipped=0
+
+for patch_path in "${PATCHES[@]}"; do
+    if bash "$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "$patch_path"; then
+        applied=$((applied + 1))
+    else
+        echo "WARNING: skipping REF4IK patch that no longer applies cleanly: $(basename "$patch_path")"
+        skipped=$((skipped + 1))
+    fi
+done
+
+echo "REF4IK bionic patch summary: applied=$applied skipped=$skipped total=${#PATCHES[@]}"

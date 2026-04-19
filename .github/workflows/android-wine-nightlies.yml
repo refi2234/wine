@@ -104,6 +104,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Free up disk space
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h
+
       - name: Install dependencies
         shell: bash
         run: |
@@ -191,6 +197,7 @@ jobs:
           bash "$TOOLKIT_DIR/scripts/build-wine-bionic.sh" --source-dir "$GITHUB_WORKSPACE/wine-source" --build-dir "$GITHUB_WORKSPACE/wine-build"
 
       - name: Upload Wine artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: wine-artifacts
@@ -198,6 +205,11 @@ jobs:
             output/*.wcp
             output/*.tar.xz
             output/*.sha256
+            wine-build/logs/*.log
+            wine-source/config.log
+            wine-build/host/config.log
+            wine-build/target/config.log
+          if-no-files-found: warn
 
   release:
     needs:

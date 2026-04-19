@@ -231,12 +231,18 @@ jobs:
           bash "$TOOLKIT_DIR/scripts/build-proton-arm64.sh" --source-dir "$GITHUB_WORKSPACE/wine-source" --build-dir "$GITHUB_WORKSPACE/wine-build" "${EXTRA_ARGS[@]}"
 
       - name: Upload Proton artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: proton-artifacts
           path: |
             output/*.wcp
             output/*.sha256
+            wine-build/logs/*.log
+            wine-source/config.log
+            wine-build/host/config.log
+            wine-build/target/config.log
+          if-no-files-found: warn
 
   release:
     needs:

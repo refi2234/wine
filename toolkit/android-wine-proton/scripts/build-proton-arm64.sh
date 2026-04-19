@@ -67,6 +67,20 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
+run_step() {
+    local name="$1"
+    shift
+    local step_log="$LOG_DIR/${name}.log"
+    log "Running step: $name"
+    if "$@" >"$step_log" 2>&1; then
+        log "Step finished: $name"
+    else
+        log "Step failed: $name"
+        tail -n 200 "$step_log"
+        exit 1
+    fi
+}
+
 log "=== Proton ARM64 Android Build ==="
 log "Build started: $(date -u)"
 log "Jobs: $JOBS"
@@ -252,7 +266,7 @@ if [[ $SKIP_TOOLS -eq 0 ]]; then
     TOOLS_START="$(date -u +%s)"
     # __tooldeps__ builds everything under tools/ and tools/*/ at once.
     # This is the Wine 9+ replacement for the removed __builtin__ target.
-    make -C "$BUILD_DIR/host" -j"$JOBS" __tooldeps__
+    run_step build-host-tools make -C "$BUILD_DIR/host" -j"$JOBS" __tooldeps__
     TOOLS_TIME=$(( $(date -u +%s) - TOOLS_START ))
     log "Host tools built in ${TOOLS_TIME}s"
 fi
@@ -314,7 +328,7 @@ fi
 log ""
 log "--- Step 4: Build Wine ARM64 ---"
 BUILD_WINE_START="$(date -u +%s)"
-make -C "$BUILD_DIR/target" -j"$JOBS" 2>&1
+run_step build-target make -C "$BUILD_DIR/target" -j"$JOBS"
 BUILD_WINE_TIME=$(( $(date -u +%s) - BUILD_WINE_START ))
 log "Wine built in ${BUILD_WINE_TIME}s ($(( BUILD_WINE_TIME / 60 ))m)"
 
@@ -326,7 +340,7 @@ log "--- Step 5: Install to staging directory ---"
 INSTALL_DIR="$BUILD_DIR/install"
 rm -rf "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
-make -C "$BUILD_DIR/target" install DESTDIR="$INSTALL_DIR"
+run_step install-target make -C "$BUILD_DIR/target" install DESTDIR="$INSTALL_DIR"
 
 # Reorganize to match expected .wcp layout
 # make install puts files under prefix; flatten to bin/ lib/ share/
@@ -445,7 +459,7 @@ OUTPUT_DIR="$(dirname "$SCRIPT_DIR")/output"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_WCP="$OUTPUT_DIR/proton-${ARTIFACT_VERSION}.wcp"
 
-"$SCRIPT_DIR/create-proton-wcp.sh" \
+run_step package-wcp "$SCRIPT_DIR/create-proton-wcp.sh" \
     "$INSTALL_DIR" \
     "$OUTPUT_WCP" \
     "$PROFILE_VERSION" \

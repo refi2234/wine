@@ -41,32 +41,49 @@ DLLTOOL="$LLVM_MINGW_ROOT/bin/llvm-dlltool"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/host" "$BUILD_DIR/target" "$BUILD_DIR/install" output
+LOG_DIR="$BUILD_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/build-$(date -u +%Y%m%d-%H%M%S).log"
 
-echo "Preparing Wine build system"
-(
-    cd "$SOURCE_DIR"
-    ./tools/make_requests
-    ./tools/make_specfiles
-    ./tools/make_makefiles
-    autoreconf -f
-)
+log() {
+    echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG_FILE"
+}
 
-echo "Configuring host wine-tools"
-(
-    cd "$BUILD_DIR/host"
-    env -u CC -u CXX -u CPPFLAGS -u CFLAGS -u CXXFLAGS -u LDFLAGS -u PKG_CONFIG_LIBDIR -u ACLOCAL_PATH \
-        -u FREETYPE_CFLAGS -u PULSE_CFLAGS -u PULSE_LIBS -u SDL2_CFLAGS -u SDL2_LIBS -u X_CFLAGS -u X_LIBS \
-        -u GSTREAMER_CFLAGS -u GSTREAMER_LIBS -u FFMPEG_CFLAGS -u FFMPEG_LIBS \
-        "$SOURCE_DIR/configure" \
+run_step() {
+    local name="$1"
+    shift
+    local step_log="$LOG_DIR/${name}.log"
+    log "Running step: $name"
+    if "$@" >"$step_log" 2>&1; then
+        log "Step finished: $name"
+    else
+        log "Step failed: $name"
+        tail -n 200 "$step_log" | tee -a "$LOG_FILE"
+        exit 1
+    fi
+}
+
+run_in_dir() {
+    local name="$1"
+    local dir="$2"
+    shift 2
+    run_step "$name" bash -lc "cd \"$dir\" && $*"
+}
+
+log "Full log: $LOG_FILE"
+run_in_dir prepare-build-system "$SOURCE_DIR" "./tools/make_requests && ./tools/make_specfiles && ./tools/make_makefiles && autoreconf -f"
+
+run_step configure-host-tools env -u CC -u CXX -u CPPFLAGS -u CFLAGS -u CXXFLAGS -u LDFLAGS -u PKG_CONFIG_LIBDIR -u ACLOCAL_PATH \
+    -u FREETYPE_CFLAGS -u PULSE_CFLAGS -u PULSE_LIBS -u SDL2_CFLAGS -u SDL2_LIBS -u X_CFLAGS -u X_LIBS \
+    -u GSTREAMER_CFLAGS -u GSTREAMER_LIBS -u FFMPEG_CFLAGS -u FFMPEG_LIBS \
+    bash -lc "cd \"$BUILD_DIR/host\" && \"$SOURCE_DIR/configure\" \
         --without-x \
         --without-gstreamer \
         --without-vulkan \
         --without-wayland \
-        --enable-wineandroid_drv=no
-)
+        --enable-wineandroid_drv=no"
 
-echo "Building host wine-tools"
-env -u CC -u CXX -u CPPFLAGS -u CFLAGS -u CXXFLAGS -u LDFLAGS -u PKG_CONFIG_LIBDIR -u ACLOCAL_PATH \
+run_step build-host-tools env -u CC -u CXX -u CPPFLAGS -u CFLAGS -u CXXFLAGS -u LDFLAGS -u PKG_CONFIG_LIBDIR -u ACLOCAL_PATH \
     -u FREETYPE_CFLAGS -u PULSE_CFLAGS -u PULSE_LIBS -u SDL2_CFLAGS -u SDL2_LIBS -u X_CFLAGS -u X_LIBS \
     -u GSTREAMER_CFLAGS -u GSTREAMER_LIBS -u FFMPEG_CFLAGS -u FFMPEG_LIBS \
     make -C "$BUILD_DIR/host" -j"$JOBS" __tooldeps__
@@ -91,10 +108,7 @@ export FFMPEG_LIBS=""
 
 PREFIX="/data/data/${APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-${TARGET_ARCH}"
 
-echo "Configuring Android ${TARGET_ARCH} target"
-(
-    cd "$BUILD_DIR/target"
-    "$SOURCE_DIR/configure" \
+run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \"$SOURCE_DIR/configure\" \
         --host="$TARGET" \
         --with-wine-tools="$BUILD_DIR/host" \
         --with-mingw=clang \
@@ -148,11 +162,9 @@ echo "Configuring Android ${TARGET_ARCH} target"
         AR="$AR" \
         RANLIB="$RANLIB" \
         STRIP="$STRIP" \
-        DLLTOOL="$DLLTOOL"
-)
+        DLLTOOL=\"$DLLTOOL\""
 
-echo "Building Wine for ${TARGET_ARCH}"
-make -C "$BUILD_DIR/target" -j"$JOBS" install DESTDIR="$BUILD_DIR/install"
+run_step build-and-install-target make -C "$BUILD_DIR/target" -j"$JOBS" install DESTDIR="$BUILD_DIR/install"
 
 INNER="$BUILD_DIR/install/data/data/${APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-${TARGET_ARCH}"
 [[ -d "$INNER" ]] || { echo "Expected install dir missing: $INNER" >&2; exit 1; }
@@ -163,7 +175,7 @@ DATE_TAG="$(git -C "$SOURCE_DIR" log -1 --format='%cd' --date=format:'%Y%m%d')"
 GIT_HASH="$(git -C "$SOURCE_DIR" rev-parse --short HEAD)"
 VERSION_NAME="wine-${PROFILE_VERSION}-${TARGET_ARCH}-${DATE_TAG}-${GIT_HASH}"
 
-tar -Jcf "output/${VERSION_NAME}.tar.xz" -C "$BUILD_DIR/install" bin lib share
+run_step package-tar tar -Jcf "output/${VERSION_NAME}.tar.xz" -C "$BUILD_DIR/install" bin lib share
 sha256sum "output/${VERSION_NAME}.tar.xz" > "output/${VERSION_NAME}.tar.xz.sha256"
 
 if [[ -f "$SCRIPT_DIR/reference/extracted/prefixPack.txz" ]]; then
@@ -174,7 +186,7 @@ if [[ -f "$SCRIPT_DIR/reference/extracted/prefixPack.txz" ]]; then
         "$PROFILE_VERSION_CODE" \
         "Wine Bionic ${TARGET_ARCH} ${DATE_TAG} (${GIT_HASH})" \
         wine
-    "$SCRIPT_DIR/create-proton-wcp.sh" \
+    run_step package-wcp "$SCRIPT_DIR/create-proton-wcp.sh" \
         "$BUILD_DIR/install" \
         "output/${VERSION_NAME}.wcp" \
         "${PROFILE_VERSION}-${TARGET_ARCH}" \
@@ -183,4 +195,4 @@ if [[ -f "$SCRIPT_DIR/reference/extracted/prefixPack.txz" ]]; then
         wine
 fi
 
-echo "Plain Wine ${TARGET_ARCH} artifacts written to output/"
+log "Plain Wine ${TARGET_ARCH} artifacts written to output/"
