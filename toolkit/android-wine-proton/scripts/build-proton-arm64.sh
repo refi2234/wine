@@ -464,7 +464,7 @@ OUTPUT_DIR="$(dirname "$SCRIPT_DIR")/output"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_WCP="$OUTPUT_DIR/proton-${ARTIFACT_VERSION}.wcp"
 
-run_step package-wcp "$SCRIPT_DIR/create-proton-wcp.sh" \
+run_step package-wcp bash "$SCRIPT_DIR/create-proton-wcp.sh" \
     "$INSTALL_DIR" \
     "$OUTPUT_WCP" \
     "$PROFILE_VERSION" \

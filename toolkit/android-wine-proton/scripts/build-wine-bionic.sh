@@ -190,7 +190,7 @@ if [[ -f "$SCRIPT_DIR/reference/extracted/prefixPack.txz" ]]; then
         "$PROFILE_VERSION_CODE" \
         "Wine Bionic ${TARGET_ARCH} ${DATE_TAG} (${GIT_HASH})" \
         wine
-    run_step package-wcp "$SCRIPT_DIR/create-proton-wcp.sh" \
+    run_step package-wcp bash "$SCRIPT_DIR/create-proton-wcp.sh" \
         "$BUILD_DIR/install" \
         "output/${VERSION_NAME}.wcp" \
         "${PROFILE_VERSION}-${TARGET_ARCH}" \
