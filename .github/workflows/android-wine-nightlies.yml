@@ -36,10 +36,20 @@ on:
         required: false
         default: wine-bionic
         type: string
+      wine_display_version:
+        description: Version string to write into the profile versionName instead of bionic
+        required: false
+        default: "9.17"
+        type: string
       wine_version_code:
         description: Version code to use inside the plain Wine profile
         required: false
         default: "1"
+        type: string
+      wine_profile_description:
+        description: Profile description prefix for plain Wine
+        required: false
+        default: "Wine Bionic ref4ik build"
         type: string
       release_description:
         description: Optional extra text for the release notes
@@ -148,7 +158,7 @@ jobs:
           tar -xf "$HOME/imagefs/termuxfs.tar" -C "$HOME/imagefs"
           sudo mv "$HOME/imagefs/data" / || true
           sudo chown -R "$(id -u):$(id -g)" /data
-          wget -q "https://github.com/GameNative/bionic-prefix-files/raw/main/prefixPack-arm64ec.txz" -O "$TOOLKIT_DIR/scripts/reference/extracted/prefixPack.txz" || true
+          wget -q "https://github.com/thjjfyu/winebionreg/releases/download/Dddf/prefixPack.tzst" -O "$TOOLKIT_DIR/scripts/reference/extracted/prefixPack.tzst" || true
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -191,7 +201,9 @@ jobs:
           LLVM_MINGW_ROOT: /opt/llvm-mingw
           TERMUX_DEPS_PREFIX: /data/data/com.termux/files/usr
           PROFILE_VERSION: ${{ github.event.inputs.wine_version_label || 'wine-bionic' }}
+          WINE_DISPLAY_VERSION: ${{ github.event.inputs.wine_display_version || '9.17' }}
           PROFILE_VERSION_CODE: ${{ github.event.inputs.wine_version_code || '1' }}
+          WINE_PROFILE_DESCRIPTION_PREFIX: ${{ github.event.inputs.wine_profile_description || 'Wine Bionic ref4ik build' }}
           WINLATOR_APP_ID: ${{ github.event.inputs.target_app_id || 'app.gamenative' }}
         run: |
           bash "$TOOLKIT_DIR/scripts/build-wine-bionic.sh" --source-dir "$GITHUB_WORKSPACE/wine-source" --build-dir "$GITHUB_WORKSPACE/wine-build"

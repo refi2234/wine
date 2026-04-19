@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate profile.json for a Proton .wcp package.
-Usage: generate_profile.py <output_path> <version_name> <version_code> <description> [profile_type]
+Usage: generate_profile.py <output_path> <version_name> <version_code> <description> [profile_type] [prefix_pack_name]
 """
 import json
 import sys
@@ -11,7 +11,7 @@ def main():
     if len(sys.argv) < 5:
         print(
             "Usage: generate_profile.py <output_path> <version_name> <version_code> "
-            "<description> [profile_type]"
+            "<description> [profile_type] [prefix_pack_name]"
         )
         sys.exit(1)
 
@@ -20,6 +20,7 @@ def main():
     version_code = int(sys.argv[3])
     description = sys.argv[4]
     profile_type = sys.argv[5] if len(sys.argv) > 5 else "proton"
+    prefix_pack_name = sys.argv[6] if len(sys.argv) > 6 else "prefixPack.txz"
     profile_type_lower = profile_type.lower()
     if profile_type_lower == "wine":
         profile_type = "Wine"
@@ -38,7 +39,7 @@ def main():
         paths_key: {
             "binPath": "bin",
             "libPath": "lib",
-            "prefixPack": "prefixPack.txz"
+            "prefixPack": prefix_pack_name
         }
     }
 

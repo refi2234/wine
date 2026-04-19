@@ -12,6 +12,9 @@ LLVM_MINGW_ROOT="${LLVM_MINGW_ROOT:-/opt/llvm-mingw}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
 PROFILE_VERSION="${PROFILE_VERSION:-wine-bionic}"
 PROFILE_VERSION_CODE="${PROFILE_VERSION_CODE:-1}"
+WINE_DISPLAY_VERSION="${WINE_DISPLAY_VERSION:-}"
+WINE_PROFILE_DESCRIPTION_PREFIX="${WINE_PROFILE_DESCRIPTION_PREFIX:-Wine Bionic ref4ik build}"
+WINE_PREFIX_PACK_URL="${WINE_PREFIX_PACK_URL:-}"
 APP_ID="${WINLATOR_APP_ID:-app.gamenative}"
 ANDROID_API=28
 TARGET_ARCH="x86_64"
@@ -177,25 +180,44 @@ rm -rf "$BUILD_DIR/install/data"
 
 DATE_TAG="$(git -C "$SOURCE_DIR" log -1 --format='%cd' --date=format:'%Y%m%d')"
 GIT_HASH="$(git -C "$SOURCE_DIR" rev-parse --short HEAD)"
-VERSION_NAME="wine-${PROFILE_VERSION}-${TARGET_ARCH}-${DATE_TAG}-${GIT_HASH}"
+DISPLAY_VERSION="$WINE_DISPLAY_VERSION"
+if [[ -z "$DISPLAY_VERSION" ]]; then
+    DISPLAY_VERSION="$PROFILE_VERSION"
+fi
+if [[ "$DISPLAY_VERSION" == wine-* ]]; then
+    PROFILE_VERSION_NAME="${DISPLAY_VERSION}-${TARGET_ARCH}"
+else
+    PROFILE_VERSION_NAME="wine-${DISPLAY_VERSION}-${TARGET_ARCH}"
+fi
+VERSION_NAME="${PROFILE_VERSION_NAME}-${DATE_TAG}-${GIT_HASH}"
 
 run_step package-tar tar -Jcf "output/${VERSION_NAME}.tar.xz" -C "$BUILD_DIR/install" bin lib share
 sha256sum "output/${VERSION_NAME}.tar.xz" > "output/${VERSION_NAME}.tar.xz.sha256"
 
-if [[ -f "$SCRIPT_DIR/reference/extracted/prefixPack.txz" ]]; then
-    cp "$SCRIPT_DIR/reference/extracted/prefixPack.txz" "$BUILD_DIR/install/prefixPack.txz"
+PREFIX_PACK_SOURCE=""
+for candidate in "$SCRIPT_DIR/reference/extracted/prefixPack.tzst" "$SCRIPT_DIR/reference/extracted/prefixPack.txz"; do
+    if [[ -f "$candidate" ]]; then
+        PREFIX_PACK_SOURCE="$candidate"
+        break
+    fi
+done
+
+if [[ -n "$PREFIX_PACK_SOURCE" ]]; then
+    PREFIX_PACK_NAME="$(basename "$PREFIX_PACK_SOURCE")"
+    cp "$PREFIX_PACK_SOURCE" "$BUILD_DIR/install/$PREFIX_PACK_NAME"
     python3 "$SCRIPT_DIR/generate_profile.py" \
         "$BUILD_DIR/install/profile.json" \
-        "${PROFILE_VERSION}-${TARGET_ARCH}" \
+        "$PROFILE_VERSION_NAME" \
         "$PROFILE_VERSION_CODE" \
-        "Wine Bionic ${TARGET_ARCH} ${DATE_TAG} (${GIT_HASH})" \
-        wine
+        "${WINE_PROFILE_DESCRIPTION_PREFIX} ${TARGET_ARCH} ${DATE_TAG} (${GIT_HASH})" \
+        wine \
+        "$PREFIX_PACK_NAME"
     run_step package-wcp bash "$SCRIPT_DIR/create-proton-wcp.sh" \
         "$BUILD_DIR/install" \
         "output/${VERSION_NAME}.wcp" \
-        "${PROFILE_VERSION}-${TARGET_ARCH}" \
+        "$PROFILE_VERSION_NAME" \
         "$PROFILE_VERSION_CODE" \
-        "Wine Bionic ${TARGET_ARCH} ${DATE_TAG} (${GIT_HASH})" \
+        "${WINE_PROFILE_DESCRIPTION_PREFIX} ${TARGET_ARCH} ${DATE_TAG} (${GIT_HASH})" \
         wine
 fi
 

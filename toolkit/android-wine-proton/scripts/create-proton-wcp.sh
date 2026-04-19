@@ -6,7 +6,7 @@
 #   ./create-proton-wcp.sh <input_dir> <output.wcp> [version_name] [version_code] [description] [profile_type]
 #
 # Arguments:
-#   input_dir    Directory containing: bin/ lib/ share/ prefixPack.txz (profile.json is always regenerated)
+#   input_dir    Directory containing: bin/ lib/ share/ prefixPack.txz|prefixPack.tzst (profile.json is always regenerated)
 #   output.wcp   Output .wcp file path
 #   version_name Optional: version string (default: derived from git or date)
 #   version_code Optional: integer version code (default: YYYYMMDD)
@@ -50,12 +50,26 @@ OUTPUT_WCP="$(realpath -m "$OUTPUT_WCP")"
 echo "[1/6] Validating input directory structure..."
 
 MISSING=0
-for required in bin lib share prefixPack.txz; do
+for required in bin lib share; do
     if [[ ! -e "$INPUT_DIR/$required" ]]; then
         echo "  WARNING: Missing expected item: $required"
         MISSING=$((MISSING + 1))
     fi
 done
+
+PREFIX_PACK_NAME=""
+for candidate in prefixPack.txz prefixPack.tzst; do
+    if [[ -e "$INPUT_DIR/$candidate" ]]; then
+        PREFIX_PACK_NAME="$candidate"
+        break
+    fi
+done
+if [[ -z "$PREFIX_PACK_NAME" ]]; then
+    echo "  WARNING: Missing expected item: prefixPack.txz or prefixPack.tzst"
+    MISSING=$((MISSING + 1))
+else
+    echo "  Prefix pack: $PREFIX_PACK_NAME"
+fi
 
 # --- Default version info from git or date ---
 DATE_TAG="$(date -u +%Y%m%d)"
@@ -90,7 +104,8 @@ python3 "$SCRIPT_DIR/generate_profile.py" \
     "$VERSION_NAME" \
     "$VERSION_CODE" \
     "$DESCRIPTION" \
-    "$PROFILE_TYPE"
+    "$PROFILE_TYPE" \
+    "${PREFIX_PACK_NAME:-prefixPack.txz}"
 echo "  Generated profile.json"
 
 # --- Check compression tools ---
