@@ -32,10 +32,10 @@ def main() -> int:
         return 0
 
     signature_pattern = re.compile(
-        r"void\s+ANDROID_WindowPosChanged\s*"
-        r"\(\s*HWND\s+hwnd\s*,\s*HWND\s+insert_after\s*,\s*HWND\s+owner_hint\s*,\s*"
-        r"UINT\s+swp_flags\s*,\s*BOOL\s+\w+\s*,\s*const\s+struct\s+window_rects\s+\*\s*\w+\s*,\s*"
-        r"struct\s+window_surface\s+\*\s*\w+\s*\)"
+        r"(?:static\s+)?void\s+ANDROID_WindowPosChanged\s*"
+        r"\(\s*HWND\b.*?HWND\b.*?HWND\b.*?(?:UINT|unsigned\s+int)\b.*?BOOL\b.*?"
+        r"window_rects.*?window_surface.*?\)",
+        flags=re.S,
     )
     if not signature_pattern.search(src):
         print("wineandroid init.c: no drifted ANDROID_WindowPosChanged signature found, skipping")
@@ -57,13 +57,16 @@ def main() -> int:
     )
 
     updated = src[:idx] + wrapper + src[idx:]
-    if ".pWindowPosChanged = ANDROID_WindowPosChanged," not in updated:
+    assignment_pattern = re.compile(
+        r"(?P<prefix>\.pWindowPosChanged\s*=\s*)ANDROID_WindowPosChanged(?P<suffix>\s*,)"
+    )
+    if not assignment_pattern.search(updated):
         print("ERROR: could not find pWindowPosChanged assignment in wineandroid init.c")
         return 1
-    updated = updated.replace(
-        ".pWindowPosChanged = ANDROID_WindowPosChanged,",
-        ".pWindowPosChanged = ANDROID_WindowPosChanged_bridge,",
-        1,
+    updated = assignment_pattern.sub(
+        r"\g<prefix>ANDROID_WindowPosChanged_bridge\g<suffix>",
+        updated,
+        count=1,
     )
 
     with open(init_c, "w", encoding="utf-8", newline="\n") as f:
