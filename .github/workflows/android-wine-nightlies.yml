@@ -296,8 +296,37 @@ jobs:
       - name: Commit latest.json
         shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="${GITHUB_REF_NAME:-main}"
+          git fetch origin "$BRANCH"
+          BRANCH="$BRANCH" python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          path = Path("toolkit/android-wine-proton/latest.json")
+          local_data = json.loads(path.read_text(encoding="utf-8"))
+          branch = os.environ.get("BRANCH", "main")
+
+          try:
+              remote_text = subprocess.check_output(
+                  ["git", "show", f"origin/{branch}:toolkit/android-wine-proton/latest.json"],
+                  text=True,
+              )
+              remote_data = json.loads(remote_text)
+          except subprocess.CalledProcessError:
+              remote_data = {"artifacts": {}}
+
+          merged = remote_data
+          merged.setdefault("artifacts", {})
+          merged["artifacts"].update(local_data.get("artifacts", {}))
+          path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+          PY
           git add "$TOOLKIT_DIR/latest.json"
-          git diff --staged --quiet || git commit -m "chore: update wine latest.json for run ${{ github.run_number }}"
-          git push
+          git diff --staged --quiet && exit 0
+          git commit -m "chore: update wine latest.json for run ${{ github.run_number }}"
+          git pull --rebase origin "$BRANCH"
+          git push origin "HEAD:$BRANCH"
