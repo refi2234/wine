@@ -32,13 +32,18 @@ for item in data.get("patches", []):
 PY
 
 applied=0
+skipped=0
 while IFS=$'\t' read -r patch_id description url; do
     [[ -n "$patch_id" ]] || continue
     patch_file="$TMP_DIR/${patch_id}.patch"
     echo "Downloading extra patch: $description"
     curl -LfsS "$url" -o "$patch_file"
-    bash "$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "$patch_file"
-    applied=$((applied + 1))
+    if bash "$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "$patch_file"; then
+        applied=$((applied + 1))
+    else
+        echo "WARNING: skipping extra patch that failed to apply cleanly: $patch_id"
+        skipped=$((skipped + 1))
+    fi
 done < "$TMP_DIR/patch-list.tsv"
 
-echo "Applied $applied extra Wine patches"
+echo "Extra Wine patch bundle summary: applied=$applied skipped=$skipped"
