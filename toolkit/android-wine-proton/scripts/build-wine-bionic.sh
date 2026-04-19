@@ -36,8 +36,8 @@ done
 
 TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
 TARGET="${TARGET_ARCH}-linux-android"
-CC="$TOOLCHAIN/${TARGET}${ANDROID_API}-clang"
-CXX="$TOOLCHAIN/${TARGET}${ANDROID_API}-clang++"
+REAL_CC="$TOOLCHAIN/${TARGET}${ANDROID_API}-clang"
+REAL_CXX="$TOOLCHAIN/${TARGET}${ANDROID_API}-clang++"
 AR="$TOOLCHAIN/llvm-ar"
 RANLIB="$TOOLCHAIN/llvm-ranlib"
 STRIP="$TOOLCHAIN/llvm-strip"
@@ -45,10 +45,38 @@ DLLTOOL="$LLVM_MINGW_ROOT/bin/llvm-dlltool"
 export PATH="$LLVM_MINGW_ROOT/bin:$PATH"
 
 rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR/host" "$BUILD_DIR/target" "$BUILD_DIR/install" output
+mkdir -p "$BUILD_DIR/host" "$BUILD_DIR/target" "$BUILD_DIR/install" "$BUILD_DIR/toolchain-wrappers" output
 LOG_DIR="$BUILD_DIR/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/build-$(date -u +%Y%m%d-%H%M%S).log"
+
+cat >"$BUILD_DIR/toolchain-wrappers/android-clang-filter.sh" <<EOF
+#!/bin/bash
+set -euo pipefail
+real_compiler="\$1"
+shift
+filtered=()
+for arg in "\$@"; do
+    if [[ "\$arg" == "-mabi=ms" ]]; then
+        continue
+    fi
+    filtered+=("\$arg")
+done
+exec "\$real_compiler" "\${filtered[@]}"
+EOF
+chmod +x "$BUILD_DIR/toolchain-wrappers/android-clang-filter.sh"
+
+CC="$BUILD_DIR/toolchain-wrappers/cc"
+CXX="$BUILD_DIR/toolchain-wrappers/cxx"
+cat >"$CC" <<EOF
+#!/bin/bash
+exec "$BUILD_DIR/toolchain-wrappers/android-clang-filter.sh" "$REAL_CC" "\$@"
+EOF
+cat >"$CXX" <<EOF
+#!/bin/bash
+exec "$BUILD_DIR/toolchain-wrappers/android-clang-filter.sh" "$REAL_CXX" "\$@"
+EOF
+chmod +x "$CC" "$CXX"
 
 log() {
     echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG_FILE"
