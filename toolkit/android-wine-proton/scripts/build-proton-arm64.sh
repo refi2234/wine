@@ -132,7 +132,8 @@ fi
 # Keep local builds aligned with the workflow patch set for Winlator container exit.
 bash "$SCRIPT_DIR/apply_patch_series.sh" \
     "$SOURCE_DIR" \
-    "$SCRIPT_DIR/../patches/ge-gamenative-firstpass/explorer/explorer_startmenu_shutdown_latch.patch"
+    "$SCRIPT_DIR/../patches/ge-gamenative-firstpass/explorer/explorer_startmenu_shutdown_latch.patch" \
+    "$SCRIPT_DIR/../patches/ge-wine-only-wrapper/patches/proton/build_failure_prevention-add-nls.patch"
 python3 "$SCRIPT_DIR/fix_preloader_r_debug_noise.py" "$SOURCE_DIR"
 bash "$SCRIPT_DIR/disable-unsupported-proton-dlls.sh" "$SOURCE_DIR"
 
@@ -321,6 +322,10 @@ if [[ $SKIP_CONFIGURE -eq 0 ]]; then
     )
     log "ARM64 target configured."
 fi
+
+log ""
+log "--- Step 3b: Build NLS tables ---"
+run_step build-target-nls make -C "$BUILD_DIR/target" -j"$JOBS" nls/all
 
 # ============================================================
 # STEP 4: Build Wine

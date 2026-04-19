@@ -167,6 +167,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \"$SOURCE_DIR/co
         STRIP="$STRIP" \
         DLLTOOL=\"$DLLTOOL\""
 
+run_step build-target-nls make -C "$BUILD_DIR/target" -j"$JOBS" nls/all
 run_step build-and-install-target make -C "$BUILD_DIR/target" -j"$JOBS" install DESTDIR="$BUILD_DIR/install"
 
 INNER="$BUILD_DIR/install/data/data/${APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-${TARGET_ARCH}"
