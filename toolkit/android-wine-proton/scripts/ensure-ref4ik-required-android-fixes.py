@@ -113,14 +113,24 @@ def ensure_winex11_glx_fix(source_dir: Path) -> str:
         return "winex11: init_opengl() block not found, skipping GLX env-var reconciliation"
 
     body = init_opengl.group("body")
-    anchor = "    unsigned int i;\n"
-    if anchor not in body:
-        return "winex11: expected init_opengl variable block not found, skipping GLX env-var reconciliation"
+    declaration = "    static int wine_x11forceglx = -1;\n"
+    anchors = (
+        "    unsigned int i;\n",
+        "    int error_base, event_base;\n",
+        "    int event_base, error_base;\n",
+    )
 
-    body = body.replace(anchor, anchor + "    static int wine_x11forceglx = -1;\n", 1)
+    for anchor in anchors:
+        if anchor in body:
+            body = body.replace(anchor, anchor + declaration, 1)
+            text = text[: init_opengl.start("body")] + body + text[init_opengl.end("body") :]
+            path.write_text(text, encoding="utf-8")
+            return f"winex11: restored missing GLX env-var declaration after patch drift (anchor: {anchor.strip()})"
+
+    body = declaration + body
     text = text[: init_opengl.start("body")] + body + text[init_opengl.end("body") :]
     path.write_text(text, encoding="utf-8")
-    return "winex11: restored missing GLX env-var declaration after patch drift"
+    return "winex11: restored missing GLX env-var declaration at init_opengl() top after patch drift"
 
 
 def main() -> int:
