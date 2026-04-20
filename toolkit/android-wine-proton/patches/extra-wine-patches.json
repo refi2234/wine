@@ -73,18 +73,6 @@
       "url": "https://github.com/brunodev85/wine-10.10-custom/commit/cb9eff0a289d1b8be9d3d0a3aa3821741817ef68.patch"
     },
     {
-      "id": "xinput-gamepad-device",
-      "description": "xinput implement gamepad device",
-      "path": "extra-wine-bundle/xinput-gamepad-device.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/1b9a5f472a69c05d2cce08ce79cdd550225b6186.patch"
-    },
-    {
-      "id": "dinput-gamepad-device",
-      "description": "dinput implement gamepad device",
-      "path": "extra-wine-bundle/dinput-gamepad-device.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/0c455f4100f870d96beeaa7e51b69ad0c2567b85.patch"
-    },
-    {
       "id": "eventfd-synchronization",
       "description": "apply eventfd_synchronization patch",
       "path": "extra-wine-bundle/eventfd-synchronization.patch",
