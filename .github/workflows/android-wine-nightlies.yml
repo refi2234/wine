@@ -39,6 +39,11 @@ on:
         required: false
         default: "9.17"
         type: string
+      wine_profile_arch_suffix:
+        description: Suffix to append in the profile versionName after the version string
+        required: false
+        default: x86_64
+        type: string
       wine_version_code:
         description: Version code to use inside the plain Wine profile
         required: false
@@ -224,6 +229,7 @@ jobs:
           TERMUX_DEPS_PREFIX: /data/data/com.termux/files/usr
           PROFILE_VERSION: ${{ github.event.inputs.wine_version_label || 'wine-bionic' }}
           WINE_DISPLAY_VERSION: ${{ github.event.inputs.wine_display_version || '9.17' }}
+          PROFILE_ARCH_SUFFIX: ${{ github.event.inputs.wine_profile_arch_suffix || 'x86_64' }}
           PROFILE_VERSION_CODE: ${{ github.event.inputs.wine_version_code || '1' }}
           WINE_PROFILE_DESCRIPTION_PREFIX: ${{ github.event.inputs.wine_profile_description || 'Wine Bionic ref4ik build' }}
           WINLATOR_APP_ID: ${{ github.event.inputs.target_app_id || 'app.gamenative' }}

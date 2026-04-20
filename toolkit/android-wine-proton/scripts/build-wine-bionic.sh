@@ -19,6 +19,7 @@ APP_ID="${WINLATOR_APP_ID:-app.gamenative}"
 ANDROID_API=28
 TARGET_ARCH="x86_64"
 WOW64_ARCHES="x86_64,i386"
+PROFILE_ARCH_SUFFIX="${PROFILE_ARCH_SUFFIX:-$TARGET_ARCH}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -217,7 +218,7 @@ DISPLAY_VERSION="$WINE_DISPLAY_VERSION"
 if [[ -z "$DISPLAY_VERSION" ]]; then
     DISPLAY_VERSION="$PROFILE_VERSION"
 fi
-PROFILE_VERSION_NAME="${DISPLAY_VERSION}-${TARGET_ARCH}"
+PROFILE_VERSION_NAME="${DISPLAY_VERSION}-${PROFILE_ARCH_SUFFIX}"
 VERSION_NAME="${PROFILE_VERSION_NAME}-${DATE_TAG}-${GIT_HASH}"
 
 run_step package-tar tar -Jcf "output/${VERSION_NAME}.tar.xz" -C "$BUILD_DIR/install" bin lib share
@@ -238,7 +239,7 @@ if [[ -n "$PREFIX_PACK_SOURCE" ]]; then
         "$BUILD_DIR/install/profile.json" \
         "$PROFILE_VERSION_NAME" \
         "$PROFILE_VERSION_CODE" \
-        "${WINE_PROFILE_DESCRIPTION_PREFIX} ${TARGET_ARCH} ${DATE_TAG} (${GIT_HASH})" \
+        "${WINE_PROFILE_DESCRIPTION_PREFIX} ${PROFILE_ARCH_SUFFIX} ${DATE_TAG} (${GIT_HASH})" \
         wine \
         "$PREFIX_PACK_NAME"
     run_step package-wcp bash "$SCRIPT_DIR/create-proton-wcp.sh" \
@@ -246,7 +247,7 @@ if [[ -n "$PREFIX_PACK_SOURCE" ]]; then
         "output/${VERSION_NAME}.wcp" \
         "$PROFILE_VERSION_NAME" \
         "$PROFILE_VERSION_CODE" \
-        "${WINE_PROFILE_DESCRIPTION_PREFIX} ${TARGET_ARCH} ${DATE_TAG} (${GIT_HASH})" \
+        "${WINE_PROFILE_DESCRIPTION_PREFIX} ${PROFILE_ARCH_SUFFIX} ${DATE_TAG} (${GIT_HASH})" \
         wine
 fi
 
