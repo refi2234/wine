@@ -98,18 +98,27 @@ def ensure_winex11_glx_fix(source_dir: Path) -> str:
     path = source_dir / "dlls" / "winex11.drv" / "opengl.c"
     text = path.read_text(encoding="utf-8")
 
-    if 'wine_x11forceglx = getenv("WINE_X11FORCEGLX")' not in text:
+    if "WINE_X11FORCEGLX" not in text and "wine_x11forceglx" not in text:
         return "winex11: GLX env-var force block not present, nothing to reconcile"
 
     if "static int wine_x11forceglx = -1;" in text:
         return "winex11: GLX env-var declaration already present"
 
+    init_opengl = re.search(
+        r"static void init_opengl\(void\)\n\{\n(?P<body>.*?)(?=\n(?:static |BOOL |void |\w+\s+\*?\w+\())",
+        text,
+        re.DOTALL,
+    )
+    if not init_opengl:
+        raise RuntimeError(f"winex11: init_opengl() block not found in {path}")
+
+    body = init_opengl.group("body")
     anchor = "    unsigned int i;\n"
-    replacement = anchor + "    static int wine_x11forceglx = -1;\n"
-    if anchor not in text:
+    if anchor not in body:
         raise RuntimeError(f"winex11: expected init_opengl variable block not found in {path}")
 
-    text = text.replace(anchor, replacement, 1)
+    body = body.replace(anchor, anchor + "    static int wine_x11forceglx = -1;\n", 1)
+    text = text[: init_opengl.start("body")] + body + text[init_opengl.end("body") :]
     path.write_text(text, encoding="utf-8")
     return "winex11: restored missing GLX env-var declaration after patch drift"
 
