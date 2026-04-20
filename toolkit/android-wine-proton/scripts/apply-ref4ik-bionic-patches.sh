@@ -18,9 +18,10 @@ REQUIRED_PATCHES=(
 
 OPTIONAL_PATCHES=(
     "$PATCH_DIR/0002-winex11-force-glx-extension-through-env-var.patch"
-    "$PATCH_DIR/0003-add-pipetto-crypto-esync-patches.patch"
     "$PATCH_DIR/0005-winevulkan-fixup-compilation-when-os-is-used.patch"
 )
+
+OPTIONAL_ESYNC_PATCH="$PATCH_DIR/0003-add-pipetto-crypto-esync-patches.patch"
 
 echo "Applying local REF4IK March 4, 2026 patchset from $PATCH_DIR"
 applied=0
@@ -38,6 +39,31 @@ for patch_path in "${REQUIRED_PATCHES[@]}"; do
 done
 
 python3 "$SCRIPT_DIR/ensure-ref4ik-required-android-fixes.py" "$SOURCE_DIR"
+
+supports_ref4ik_esync_patch() {
+    [[ -f "$SOURCE_DIR/dlls/ntdll/unix/esync.h" ]] || return 1
+    [[ -f "$SOURCE_DIR/server/esync.h" ]] || return 1
+    return 0
+}
+
+if supports_ref4ik_esync_patch; then
+    if bash "$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "$OPTIONAL_ESYNC_PATCH"; then
+        applied=$((applied + 1))
+        if [[ ! -f "$SOURCE_DIR/dlls/ntdll/unix/esync.h" || ! -f "$SOURCE_DIR/server/esync.h" ]]; then
+            echo "WARNING: REF4IK esync patch left source tree in an incomplete state; rolling it back"
+            git -C "$SOURCE_DIR" reset --hard HEAD >/dev/null 2>&1 || true
+            git -C "$SOURCE_DIR" clean -fd >/dev/null 2>&1 || true
+            applied=$((applied - 1))
+            skipped=$((skipped + 1))
+        fi
+    else
+        echo "WARNING: skipping optional REF4IK patch that no longer applies cleanly: $(basename "$OPTIONAL_ESYNC_PATCH")"
+        skipped=$((skipped + 1))
+    fi
+else
+    echo "WARNING: skipping optional REF4IK esync patch because this Wine source lacks esync header support"
+    skipped=$((skipped + 1))
+fi
 
 for patch_path in "${OPTIONAL_PATCHES[@]}"; do
     if bash "$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "$patch_path"; then
