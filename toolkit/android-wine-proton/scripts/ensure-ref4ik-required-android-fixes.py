@@ -94,6 +94,26 @@ def ensure_locale_fix(source_dir: Path) -> str:
     return "locale: added Android locale workaround"
 
 
+def ensure_winex11_glx_fix(source_dir: Path) -> str:
+    path = source_dir / "dlls" / "winex11.drv" / "opengl.c"
+    text = path.read_text(encoding="utf-8")
+
+    if 'wine_x11forceglx = getenv("WINE_X11FORCEGLX")' not in text:
+        return "winex11: GLX env-var force block not present, nothing to reconcile"
+
+    if "static int wine_x11forceglx = -1;" in text:
+        return "winex11: GLX env-var declaration already present"
+
+    anchor = "    unsigned int i;\n"
+    replacement = anchor + "    static int wine_x11forceglx = -1;\n"
+    if anchor not in text:
+        raise RuntimeError(f"winex11: expected init_opengl variable block not found in {path}")
+
+    text = text.replace(anchor, replacement, 1)
+    path.write_text(text, encoding="utf-8")
+    return "winex11: restored missing GLX env-var declaration after patch drift"
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: ensure-ref4ik-required-android-fixes.py <wine-source-dir>", file=sys.stderr)
@@ -107,6 +127,7 @@ def main() -> int:
     results = [
         ensure_pulse_fix(source_dir),
         ensure_locale_fix(source_dir),
+        ensure_winex11_glx_fix(source_dir),
     ]
     for line in results:
         print(line)
