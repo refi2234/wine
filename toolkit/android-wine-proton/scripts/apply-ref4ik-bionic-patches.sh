@@ -78,4 +78,6 @@ for patch_path in "${OPTIONAL_PATCHES[@]}"; do
     fi
 done
 
+python3 "$SCRIPT_DIR/ensure-ref4ik-required-android-fixes.py" "$SOURCE_DIR"
+
 echo "REF4IK bionic patch summary: applied=$applied skipped=$skipped required_drifted=$required_failed total=$(( ${#REQUIRED_PATCHES[@]} + ${#OPTIONAL_PATCHES[@]} ))"
