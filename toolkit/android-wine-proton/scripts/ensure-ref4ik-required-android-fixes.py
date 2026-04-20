@@ -10,24 +10,51 @@ def ensure_pulse_fix(source_dir: Path) -> str:
     text = path.read_text(encoding="utf-8")
 
     lines = text.splitlines()
+    target_tokens = (
+        "pthread_mutexattr_setprotocol",
+        "pthread_mutexattr_setrobust",
+    )
+
     for i, line in enumerate(lines):
-        if "pthread_mutexattr_setprotocol" not in line and "pthread_mutexattr_setrobust" not in line:
+        if not any(token in line for token in target_tokens):
             continue
 
-        prev_line = lines[i - 1].strip() if i > 0 else ""
-        next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
-        if prev_line == "#ifndef __ANDROID__" and next_line == "#endif":
-            return "pulse: already guarded for Android"
+        block_start = i
+        while block_start > 0:
+            prev = lines[block_start - 1]
+            if any(token in prev for token in target_tokens):
+                block_start -= 1
+                continue
+            break
 
-        indent = re.match(r"^[ \t]*", line).group(0)
+        block_end = i
+        while block_end + 1 < len(lines):
+            nxt = lines[block_end + 1]
+            if any(token in nxt for token in target_tokens):
+                block_end += 1
+                continue
+            break
+
+        prev_line = lines[block_start - 1].strip() if block_start > 0 else ""
+        next_line = lines[block_end + 1].strip() if block_end + 1 < len(lines) else ""
+        if prev_line == "#ifndef __ANDROID__" and next_line == "#endif":
+            return "pulse: Android guard already covers mutex attribute block"
+
+        indent = re.match(r"^[ \t]*", lines[block_start]).group(0)
+        block_lines = lines[block_start : block_end + 1]
         replacement = [
             f"{indent}#ifndef __ANDROID__",
-            line,
+            *block_lines,
             f"{indent}#endif",
         ]
-        lines[i:i + 1] = replacement
+        lines[block_start : block_end + 1] = replacement
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return f"pulse: added Android guard around {line.strip()}"
+        guarded = ", ".join(
+            token.replace("pthread_mutexattr_", "")
+            for token in target_tokens
+            if any(token in block_line for block_line in block_lines)
+        )
+        return f"pulse: added Android guard around mutex attribute block ({guarded})"
 
     raise RuntimeError(f"pulse: supported mutex attribute call not found in {path}")
 
