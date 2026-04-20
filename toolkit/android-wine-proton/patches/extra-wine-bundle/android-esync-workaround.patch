@@ -1,0 +1,71 @@
+From b410a3e016019dc4fe0c423c5a2e7495baedaa60 Mon Sep 17 00:00:00 2001
+From: pipetto-crypto <pipetto-crypto@gmail.com>
+Date: Thu, 13 Mar 2025 16:22:50 +0100
+Subject: [PATCH] esync: workaround for android
+
+---
+ dlls/ntdll/unix/esync.c | 14 ++++++++++++++
+ server/esync.c          | 25 +++++++++++++++++++++++++
+ 2 files changed, 39 insertions(+)
+
+diff --git a/dlls/ntdll/unix/esync.c b/dlls/ntdll/unix/esync.c
+index 3074f7c72ea8..b2ec555c8fb6 100644
+--- a/dlls/ntdll/unix/esync.c
++++ b/dlls/ntdll/unix/esync.c
+@@ -51,6 +51,20 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(esync);
+ 
++#ifdef __ANDROID__
++static int shm_open(const char *name, int oflag, mode_t mode) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return open(fname, oflag, mode);
++}
++#endif
++
+ int do_esync(void)
+ {
+ #ifdef HAVE_SYS_EVENTFD_H
+diff --git a/server/esync.c b/server/esync.c
+index a5164435ed6b..9549a9c6c9ba 100644
+--- a/server/esync.c
++++ b/server/esync.c
+@@ -45,6 +45,31 @@
+ #include "esync.h"
+ #include "fsync.h"
+ 
++#ifdef __ANDROID__
++static int shm_open(const char *name, int oflag, mode_t mode) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return open(fname, oflag, mode);
++}
++static int shm_unlink(const char *name) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return unlink(fname);
++}
++#endif
++
+ int do_esync(void)
+ {
+ #ifdef HAVE_SYS_EVENTFD_H

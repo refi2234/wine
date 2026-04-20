@@ -1,0 +1,86 @@
+From ac815bc4ae2f4a7b7eba3b2be2e79ca7c1ec158a Mon Sep 17 00:00:00 2001
+From: pipetto-crypto <pipetto-crypto@gmail.com>
+Date: Thu, 13 Mar 2025 16:23:03 +0100
+Subject: [PATCH] fsync: workaround for android
+
+---
+ dlls/ntdll/unix/fsync.c | 17 ++++++++++++++++-
+ server/fsync.c          | 28 +++++++++++++++++++++++++++-
+ 2 files changed, 43 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/ntdll/unix/fsync.c b/dlls/ntdll/unix/fsync.c
+index c3da44e4f268..f486c7a60c85 100644
+--- a/dlls/ntdll/unix/fsync.c
++++ b/dlls/ntdll/unix/fsync.c
+@@ -84,6 +84,21 @@ struct timespec64
+     long long tv_nsec;
+ };
+ 
++
++#ifdef __ANDROID__
++static int shm_open(const char *name, int oflag, mode_t mode) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return open(fname, oflag, mode);
++}
++#endif
++
+ static LONGLONG nt_time_from_ts( struct timespec *ts )
+ {
+     return ticks_from_time_t( ts->tv_sec ) + (ts->tv_nsec + 50) / 100;
+@@ -165,7 +180,7 @@ static inline int futex_wake( int *addr, int val )
+ 
+ int do_fsync(void)
+ {
+-#ifdef __linux__
++#if defined(__linux__) && !defined(__ANDROID__) 
+     static int do_fsync_cached = -1;
+ 
+     if (do_fsync_cached == -1)
+diff --git a/server/fsync.c b/server/fsync.c
+index dc50aa0a1f39..8368e2862d68 100644
+--- a/server/fsync.c
++++ b/server/fsync.c
+@@ -51,9 +51,35 @@
+ #define __NR_futex_waitv 449
+ #endif
+ 
++
++#ifdef __ANDROID__
++static int shm_open(const char *name, int oflag, mode_t mode) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return open(fname, oflag, mode);
++}
++static int shm_unlink(const char *name) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return unlink(fname);
++}
++#endif
++
+ int do_fsync(void)
+ {
+-#ifdef __linux__
++#if defined(__linux__) && !defined(__ANDROID__)
+     static int do_fsync_cached = -1;
+ 
+     if (do_fsync_cached == -1)

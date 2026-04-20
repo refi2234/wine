@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="${1:-}"
 MANIFEST_PATH="${SCRIPT_DIR%/scripts}/patches/extra-wine-patches.json"
+MANIFEST_DIR="$(cd "$(dirname "$MANIFEST_PATH")" && pwd)"
 
 if [[ -z "$SOURCE_DIR" || ! -d "$SOURCE_DIR/.git" ]]; then
     echo "Usage: $0 <wine-source-dir>" >&2
@@ -26,20 +27,37 @@ import json
 import sys
 from pathlib import Path
 
-data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+manifest_path = Path(sys.argv[1]).resolve()
+manifest_dir = manifest_path.parent
+data = json.loads(manifest_path.read_text(encoding="utf-8"))
 for item in data.get("patches", []):
-    print(f"{item['id']}\t{item['description']}\t{item['url']}")
+    patch_path = item.get("path", "")
+    if patch_path:
+        patch_path = str((manifest_dir / patch_path).resolve())
+    print(f"{item['id']}\t{item['description']}\t{patch_path}\t{item.get('url', '')}")
 PY
 
 applied=0
 skipped=0
 declare -a applied_ids=()
 declare -a skipped_ids=()
-while IFS=$'\t' read -r patch_id description url; do
+while IFS=$'\t' read -r patch_id description local_path url; do
     [[ -n "$patch_id" ]] || continue
     patch_file="$TMP_DIR/${patch_id}.patch"
-    echo "Downloading extra patch: $description"
-    curl -LfsS "$url" -o "$patch_file"
+    if [[ -n "$local_path" && -f "$local_path" ]]; then
+        echo "Using bundled extra patch: $description"
+        cp "$local_path" "$patch_file"
+    elif [[ -n "$url" ]]; then
+        echo "Downloading extra patch: $description"
+        curl -LfsS "$url" -o "$patch_file"
+    else
+        echo "ERROR: no local path or download URL available for extra patch: $patch_id" >&2
+        git -C "$SOURCE_DIR" reset --hard HEAD >/dev/null 2>&1 || true
+        git -C "$SOURCE_DIR" clean -fd >/dev/null 2>&1 || true
+        skipped=$((skipped + 1))
+        skipped_ids+=("$patch_id")
+        continue
+    fi
     if bash "$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "$patch_file"; then
         applied=$((applied + 1))
         applied_ids+=("$patch_id")
