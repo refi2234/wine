@@ -41,7 +41,9 @@ done
 python3 "$SCRIPT_DIR/ensure-ref4ik-required-android-fixes.py" "$SOURCE_DIR"
 
 supports_ref4ik_esync_patch() {
+    [[ -f "$SOURCE_DIR/dlls/ntdll/unix/esync.c" ]] || return 1
     [[ -f "$SOURCE_DIR/dlls/ntdll/unix/esync.h" ]] || return 1
+    [[ -f "$SOURCE_DIR/server/esync.c" ]] || return 1
     [[ -f "$SOURCE_DIR/server/esync.h" ]] || return 1
     return 0
 }
