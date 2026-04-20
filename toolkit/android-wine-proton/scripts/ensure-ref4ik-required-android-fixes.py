@@ -110,12 +110,12 @@ def ensure_winex11_glx_fix(source_dir: Path) -> str:
         re.DOTALL,
     )
     if not init_opengl:
-        raise RuntimeError(f"winex11: init_opengl() block not found in {path}")
+        return "winex11: init_opengl() block not found, skipping GLX env-var reconciliation"
 
     body = init_opengl.group("body")
     anchor = "    unsigned int i;\n"
     if anchor not in body:
-        raise RuntimeError(f"winex11: expected init_opengl variable block not found in {path}")
+        return "winex11: expected init_opengl variable block not found, skipping GLX env-var reconciliation"
 
     body = body.replace(anchor, anchor + "    static int wine_x11forceglx = -1;\n", 1)
     text = text[: init_opengl.start("body")] + body + text[init_opengl.end("body") :]
