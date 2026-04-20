@@ -1,0 +1,484 @@
+diff --git a/dlls/winex11.drv/bitblt.c b/dlls/winex11.drv/bitblt.c
+index 4eba5ba..2425e9e 100644
+--- a/dlls/winex11.drv/bitblt.c
++++ b/dlls/winex11.drv/bitblt.c
+@@ -1972,9 +1972,13 @@ static void x11drv_surface_flush( struct window_surface *window_surface )
+ #ifdef HAVE_LIBXXSHM
+         if (surface->shminfo.shmid != -1)
+         {
++#ifdef SONAME_LIBXRENDER        
+             if (!fshack || !fs_hack_put_image_scaled( surface->hwnd, surface->window, surface->gc, surface->image,
+                                                       surface->header.rect.left, surface->header.rect.top,
+                                                       coords.width, coords.height, surface->is_argb ))
++#else
++            if (!fshack)
++#endif            
+                 XShmPutImage( gdi_display, surface->window, surface->gc, surface->image,
+                               coords.visrect.left, coords.visrect.top,
+                               surface->header.rect.left + coords.visrect.left,
+diff --git a/dlls/winex11.drv/desktop.c b/dlls/winex11.drv/desktop.c
+index 67bceb9..b334324 100644
+--- a/dlls/winex11.drv/desktop.c
++++ b/dlls/winex11.drv/desktop.c
+@@ -90,7 +90,9 @@ BOOL X11DRV_CreateDesktop( const WCHAR *name, UINT width, UINT height )
+                          0, 0, width, height, 0, default_visual.depth, InputOutput,
+                          default_visual.visual, CWEventMask | CWCursor | CWColormap, &win_attr );
+     if (!win) return FALSE;
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H    
+     X11DRV_XInput2_Enable( display, win, win_attr.event_mask );
++#endif    
+     XFlush( display );
+ 
+     X11DRV_init_desktop( win );
+diff --git a/dlls/winex11.drv/keyboard.c b/dlls/winex11.drv/keyboard.c
+index a0e8047..f769ca2 100644
+--- a/dlls/winex11.drv/keyboard.c
++++ b/dlls/winex11.drv/keyboard.c
+@@ -34,7 +34,7 @@
+ #include <X11/Xlib.h>
+ #include <X11/Xresource.h>
+ #include <X11/Xutil.h>
+-#include <X11/XKBlib.h>
++
+ 
+ #include <ctype.h>
+ #include <stdarg.h>
+@@ -62,6 +62,7 @@ WINE_DECLARE_DEBUG_CHANNEL(key);
+ static const unsigned int ControlMask = 1 << 2;
+ 
+ static int min_keycode, max_keycode, keysyms_per_keycode;
++static KeySym *key_mapping;
+ static WORD keyc2vkey[256], keyc2scan[256];
+ 
+ static int NumLockMask, ScrollLockMask, AltGrMask; /* mask in the XKeyEvent state */
+@@ -1084,6 +1085,11 @@ static const WORD xfree86_vendor_key_vkey[256] =
+     0, 0, 0, 0, 0, 0, 0, 0                                      /* 1008FFF8 */
+ };
+ 
++static inline KeySym keycode_to_keysym( Display *display, KeyCode keycode, int index )
++{
++    return key_mapping[(keycode - min_keycode) * keysyms_per_keycode + index];
++}
++
+ /* Returns the Windows virtual key code associated with the X event <e> */
+ /* kbd_section must be held */
+ static WORD EVENT_event_to_vkey( XIC xic, XKeyEvent *e)
+@@ -1393,15 +1399,6 @@ BOOL X11DRV_KeyEvent( HWND hwnd, XEvent *xev )
+ 
+     pthread_mutex_lock( &kbd_mutex );
+ 
+-    /* If XKB extensions are used, the state mask for AltGr will use the group
+-       index instead of the modifier mask. The group index is set in bits
+-       13-14 of the state field in the XKeyEvent structure. So if AltGr is
+-       pressed, look if the group index is different than 0. From XKB
+-       extension documentation, the group index for AltGr should be 2
+-       (event->state = 0x2000). It's probably better to not assume a
+-       predefined group index and find it dynamically
+-
+-       Ref: X Keyboard Extension: Library specification (section 14.1.1 and 17.1.1) */
+     /* Save also all possible modifier states. */
+     AltGrMask = event->state & (0x6000 | Mod1Mask | Mod2Mask | Mod3Mask | Mod4Mask | Mod5Mask);
+ 
+@@ -1498,21 +1495,8 @@ X11DRV_KEYBOARD_DetectLayout( Display *display )
+   for (keyc = min_keycode; keyc <= max_keycode; keyc++) {
+       /* get data for keycode from X server */
+       for (i = 0; i < syms; i++) {
+-        if (!(keysym = XkbKeycodeToKeysym( display, keyc, 0, i ))) continue;
++        if (!(keysym = keycode_to_keysym( display, keyc, i ))) continue;
+         ckey[keyc][i] = keysym_to_char(keysym);
+-        if (TRACE_ON(keyboard))
+-        {
+-            char buf[32];
+-            WCHAR bufW[32];
+-            int len, lenW;
+-            KeySym orig_keysym = keysym;
+-            len = XkbTranslateKeySym(display, &keysym, 0, buf, sizeof(buf), NULL);
+-            lenW = ntdll_umbstowcs(buf, len, bufW, ARRAY_SIZE(bufW));
+-            if (lenW < ARRAY_SIZE(bufW))
+-                bufW[lenW] = 0;
+-            TRACE("keycode %u, index %d, orig_keysym 0x%04lx, keysym 0x%04lx, buf %s, bufW %s/n",
+-                    keyc, i, orig_keysym, keysym, debugstr_a(buf), debugstr_w(bufW));
+-        }
+       }
+   }
+ 
+@@ -1616,7 +1600,8 @@ void X11DRV_InitKeyboard( Display *display )
+ 
+     pthread_mutex_lock( &kbd_mutex );
+     XDisplayKeycodes(display, &min_keycode, &max_keycode);
+-    XFree( XGetKeyboardMapping( display, min_keycode, max_keycode + 1 - min_keycode, &keysyms_per_keycode ) );
++    if (key_mapping) XFree( key_mapping );
++    key_mapping = XGetKeyboardMapping( display, min_keycode, max_keycode + 1 - min_keycode, &keysyms_per_keycode );
+ 
+     mmp = XGetModifierMapping(display);
+     kcp = mmp->modifiermap;
+@@ -1630,12 +1615,12 @@ void X11DRV_InitKeyboard( Display *display )
+ 		int k;
+ 
+ 		for (k = 0; k < keysyms_per_keycode; k += 1)
+-                    if (XkbKeycodeToKeysym( display, *kcp, 0, k ) == XK_Num_Lock)
++                    if (keycode_to_keysym( display, *kcp, k ) == XK_Num_Lock)
+ 		    {
+                         NumLockMask = 1 << i;
+                         TRACE_(key)("NumLockMask is %x/n", NumLockMask);
+ 		    }
+-                    else if (XkbKeycodeToKeysym( display, *kcp, 0, k ) == XK_Scroll_Lock)
++                    else if (keycode_to_keysym( display, *kcp, k ) == XK_Scroll_Lock)
+ 		    {
+                         ScrollLockMask = 1 << i;
+                         TRACE_(key)("ScrollLockMask is %x/n", ScrollLockMask);
+@@ -1687,7 +1672,7 @@ void X11DRV_InitKeyboard( Display *display )
+ 	      /* we seem to need to search the layout-dependent scancodes */
+ 	      int maxlen=0,maxval=-1,ok;
+ 	      for (i=0; i<syms; i++) {
+-    keysym = XkbKeycodeToKeysym( display, keyc, 0, i );
++    keysym = keycode_to_keysym( display, keyc, i );
+                 ckey[i] = keysym_to_char(keysym);
+ 	      }
+ 	      /* find key with longest match streak */
+@@ -1825,7 +1810,7 @@ void X11DRV_InitKeyboard( Display *display )
+     for (scan = 0x60, keyc = min_keycode; keyc <= max_keycode; keyc++)
+       if (keyc2vkey[keyc]&&!keyc2scan[keyc]) {
+ 	const char *ksname;
+-	keysym = XkbKeycodeToKeysym( display, keyc, 0, 0 );
++	keysym = keycode_to_keysym( display, keyc, 0 );
+ 	ksname = XKeysymToString(keysym);
+ 	if (!ksname) ksname = "NoSymbol";
+ 
+@@ -1944,7 +1929,7 @@ SHORT X11DRV_VkKeyScanEx( WCHAR wChar, HKL hkl )
+     }
+ 
+     for (index = 0; index < 4; index++) /* find shift state */
+-        if (XkbKeycodeToKeysym( display, keycode, 0, index ) == keysym) break;
++        if (keycode_to_keysym( display, keycode, index ) == keysym) break;
+ 
+     pthread_mutex_unlock( &kbd_mutex );
+ 
+@@ -2194,7 +2179,7 @@ INT X11DRV_GetKeyNameText( LONG lParam, LPWSTR lpBuffer, INT nSize )
+       INT rc;
+ 
+       keyc = (KeyCode) keyi;
+-      keys = XkbKeycodeToKeysym( display, keyc, 0, 0 );
++      keys = keycode_to_keysym( display, keyc, 0 );
+       name = XKeysymToString(keys);
+ 
+       if (name && (vkey == VK_SHIFT || vkey == VK_CONTROL || vkey == VK_MENU))
+diff --git a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
+index 2a6febb..5bfcdf9 100644
+--- a/dlls/winex11.drv/mouse.c
++++ b/dlls/winex11.drv/mouse.c
+@@ -1,4 +1,4 @@
+-/*
++ /*
+  * X11 mouse driver
+  *
+  * Copyright 1998 Ulrich Weigand
+@@ -513,10 +513,11 @@ void ungrab_clipping_window(void)
+     }
+     clipping_cursor = FALSE;
+     data->clipping_cursor = FALSE;
+-
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H    
+     /* desktop window needs to listen to XInput2 events all the time for rawinput to work */
+     if (NtUserGetWindowThread( NtUserGetDesktopWindow(), NULL ) != GetCurrentThreadId())
+         X11DRV_XInput2_Enable( data->display, None, 0 );
++#endif        
+ }
+ 
+ /***********************************************************************
+@@ -537,12 +538,14 @@ void retry_grab_clipping_window(void)
+  */
+ static BOOL is_old_motion_event( unsigned long serial )
+ {
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
+     struct x11drv_thread_data *thread_data = x11drv_thread_data();
+ 
+     if (!thread_data->warp_serial) return FALSE;
+     if ((long)(serial - thread_data->warp_serial) < 0) return TRUE;
+     thread_data->warp_serial = 0;  /* we caught up now */
+-    return FALSE;
++#endif
++	return FALSE;
+ }
+ 
+ 
+@@ -1468,11 +1471,14 @@ BOOL X11DRV_SetCursorPos( INT x, INT y )
+     }
+ 
+     TRACE( "real setting to %s/n", wine_dbgstr_point( &pos ) );
+-
++#ifdef SONAME_LIBXFIXES
+     pXFixesHideCursor( data->display, root_window );
++#endif    
+     XWarpPointer( data->display, root_window, root_window, 0, 0, 0, 0, pos.x, pos.y );
+     data->warp_serial = NextRequest( data->display );
++#ifdef SONAME_LIBXFIXES
+     pXFixesShowCursor( data->display, root_window );
++#endif
+     XFlush( data->display ); /* avoids bad mouse lag in games that do their own mouse warping */
+     TRACE( "warped to (fake) %d,%d serial %lu/n", x, y, data->warp_serial );
+     return TRUE;
+@@ -1552,7 +1558,7 @@ void move_resize_window( HWND hwnd, int dir )
+             input.mi.dx          = pos.x;
+             input.mi.dy          = pos.y;
+             input.mi.mouseData   = button_up_data[button - 1];
+-            input.mi.dwFlags     = button_up_flags[button - 1] | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
++            input.mi.dwFlags     = button_up_flags[button - 1] | MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+             input.mi.time        = NtGetTickCount();
+             input.mi.dwExtraInfo = 0;
+             __wine_send_input( hwnd, &input, NULL );
+@@ -1592,7 +1598,7 @@ BOOL X11DRV_ButtonPress( HWND hwnd, XEvent *xev )
+     input.mi.dx          = event->x;
+     input.mi.dy          = event->y;
+     input.mi.mouseData   = button_down_data[buttonNum];
+-    input.mi.dwFlags     = button_down_flags[buttonNum] | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
++    input.mi.dwFlags     = button_down_flags[buttonNum] | MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+     input.mi.time        = x11drv_time_to_ticks( event->time );
+     input.mi.dwExtraInfo = 0;
+ 
+@@ -1619,7 +1625,7 @@ BOOL X11DRV_ButtonRelease( HWND hwnd, XEvent *xev )
+     input.mi.dx          = event->x;
+     input.mi.dy          = event->y;
+     input.mi.mouseData   = button_up_data[buttonNum];
+-    input.mi.dwFlags     = button_up_flags[buttonNum] | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
++    input.mi.dwFlags     = button_up_flags[buttonNum] | MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+     input.mi.time        = x11drv_time_to_ticks( event->time );
+     input.mi.dwExtraInfo = 0;
+ 
+@@ -1646,12 +1652,13 @@ BOOL X11DRV_MotionNotify( HWND hwnd, XEvent *xev )
+     input.mi.dwFlags     = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+     input.mi.time        = x11drv_time_to_ticks( event->time );
+     input.mi.dwExtraInfo = 0;
+-
++	
+     if (is_old_motion_event( event->serial ))
+     {
+         TRACE( "pos %d,%d old serial %lu, ignoring/n", event->x, event->y, event->serial );
+         return FALSE;
+     }
++    
+     map_event_coords( hwnd, event->window, event->root, event->x_root, event->y_root, &input );
+     send_mouse_input( hwnd, event->window, event->state, &input );
+     return TRUE;
+@@ -1994,6 +2001,8 @@ void x11drv_xinput2_load(void)
+ #endif
+ }
+ 
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
++
+ static BOOL skip_mouse_from_touch(void)
+ {
+     static int cached = -1;
+@@ -2078,6 +2087,8 @@ static BOOL X11DRV_RawTouchEvent( XGenericEventCookie *xev )
+     return TRUE;
+ }
+ 
++#endif
++
+ /***********************************************************************
+  *           X11DRV_GenericEvent
+  */
+diff --git a/dlls/winex11.drv/opengl.c b/dlls/winex11.drv/opengl.c
+index ddeb895..90e6a19 100644
+--- a/dlls/winex11.drv/opengl.c
++++ b/dlls/winex11.drv/opengl.c
+@@ -644,6 +644,7 @@ static void init_opengl(void)
+ {
+     int error_base, event_base;
+     unsigned int i;
++    static int wine_x11forceglx = -1;
+ 
+     /* No need to load any other libraries as according to the ABI, libGL should be self-sufficient
+        and include all dependencies */
+@@ -790,7 +791,10 @@ static void init_opengl(void)
+ 
+     if(!X11DRV_WineGL_InitOpenglInfo()) goto failed;
+ 
+-    if (XQueryExtension( gdi_display, "GLX", &glx_opcode, &event_base, &error_base ))
++    if (wine_x11forceglx == -1)
++    	wine_x11forceglx = getenv("WINE_X11FORCEGLX") && atoi(getenv("WINE_X11FORCEGLX"));
++
++    if (XQueryExtension( gdi_display, "GLX", &glx_opcode, &event_base, &error_base ) || wine_x11forceglx)
+     {
+         TRACE("GLX is up and running error_base = %d/n", error_base);
+     } else {
+diff --git a/dlls/winex11.drv/window.c b/dlls/winex11.drv/window.c
+index b8075ae..090aedd 100644
+--- a/dlls/winex11.drv/window.c
++++ b/dlls/winex11.drv/window.c
+@@ -469,7 +469,9 @@ static void sync_window_style( struct x11drv_win_data *data )
+         int mask = get_window_attributes( data, &attr );
+ 
+         XChangeWindowAttributes( data->display, data->whole_window, mask, &attr );
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
+         X11DRV_XInput2_Enable( data->display, data->whole_window, attr.event_mask );
++#endif        
+     }
+ }
+ 
+@@ -1042,9 +1044,10 @@ static void set_style_hints( struct x11drv_win_data *data, DWORD style, DWORD ex
+  *
+  * Set the window manager hints that don't change over the lifetime of a window.
+  */
+-static void set_initial_wm_hints( Display *display, Window window )
++static void set_initial_wm_hints( Display *display, Window window, HWND hwnd )
+ {
+     long i;
++    DWORD pid = 0;
+     Atom protocols[3];
+     Atom dndVersion = WINE_XDND_VERSION;
+     XClassHint *class_hints;
+@@ -1060,29 +1063,19 @@ static void set_initial_wm_hints( Display *display, Window window )
+     /* class hints */
+     if ((class_hints = XAllocClassHint()))
+     {
+-        static char steam_proton[] = "steam_proton";
+-        const char *app_id = getenv("SteamAppId");
+-        char proton_app_class[128];
+-
+-        if(app_id && *app_id){
+-            snprintf(proton_app_class, sizeof(proton_app_class), "steam_app_%s", app_id);
+-            class_hints->res_name = proton_app_class;
+-            class_hints->res_class = proton_app_class;
+-        }else{
+-            class_hints->res_name = steam_proton;
+-            class_hints->res_class = steam_proton;
+-        }
+-
++        class_hints->res_name = process_name;
++        class_hints->res_class = process_name;
+         XSetClassHint( display, window, class_hints );
+         XFree( class_hints );
+     }
+ 
+     /* set the WM_CLIENT_MACHINE and WM_LOCALE_NAME properties */
+     XSetWMProperties(display, window, NULL, NULL, NULL, 0, NULL, NULL, NULL);
+-    /* set the pid. together, these properties are needed so the window manager can kill us if we freeze */
+-    i = getpid();
++
++    NtUserGetWindowThread( hwnd, &pid );
++    
+     XChangeProperty(display, window, x11drv_atom(_NET_WM_PID),
+-                    XA_CARDINAL, 32, PropModeReplace, (unsigned char *)&i, 1);
++                    XA_CARDINAL, 32, PropModeReplace, (unsigned char *)&pid, 1);
+ 
+     XChangeProperty( display, window, x11drv_atom(XdndAware),
+                      XA_ATOM, 32, PropModeReplace, (unsigned char*)&dndVersion, 1 );
+@@ -1091,6 +1084,9 @@ static void set_initial_wm_hints( Display *display, Window window )
+     if (user_time_window)
+         XChangeProperty( display, window, x11drv_atom(_NET_WM_USER_TIME_WINDOW),
+                          XA_WINDOW, 32, PropModeReplace, (unsigned char *)&user_time_window, 1 );
++
++    XChangeProperty( display, window, x11drv_atom(_NET_WM_HWND),
++                      XA_CARDINAL, 32, PropModeReplace, (unsigned char *)&hwnd, 2 );
+ }
+ 
+ 
+@@ -2174,9 +2170,10 @@ static void create_whole_window( struct x11drv_win_data *data )
+ 
+     XChangeProperty( data->display, data->whole_window, x11drv_atom(_WINE_ALLOW_FLIP), XA_CARDINAL, 32,
+                      PropModeReplace, (unsigned char *)&allow_flip, sizeof(allow_flip) / 4 );
+-
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
+     X11DRV_XInput2_Enable( data->display, data->whole_window, attr.event_mask );
+-    set_initial_wm_hints( data->display, data->whole_window );
++#endif
++    set_initial_wm_hints( data->display, data->whole_window, data->hwnd );
+     set_wm_hints( data );
+ 
+     XSaveContext( data->display, data->whole_window, winContext, (char *)data->hwnd );
+@@ -2406,7 +2403,7 @@ static BOOL create_desktop_win_data( Window win, HWND hwnd )
+     data->whole_window = win;
+     data->managed = TRUE;
+     NtUserSetProp( data->hwnd, whole_window_prop, (HANDLE)win );
+-    set_initial_wm_hints( display, win );
++    set_initial_wm_hints( display, win, data->hwnd );
+     release_win_data( data );
+     if (thread_data->clip_window) XReparentWindow( display, thread_data->clip_window, win, 0, 0 );
+     return TRUE;
+@@ -2526,17 +2523,19 @@ BOOL X11DRV_CreateWindow( HWND hwnd )
+     {
+         struct x11drv_thread_data *data = x11drv_init_thread_data();
+         XSetWindowAttributes attr;
+-
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
+         data->xi2_rawinput_only = TRUE;
+         X11DRV_XInput2_Enable( data->display, None, PointerMotionMask | ButtonPressMask | ButtonReleaseMask );
+-
++#endif
+         /* create the cursor clipping window */
+         attr.override_redirect = TRUE;
+         attr.event_mask = StructureNotifyMask | FocusChangeMask;
+         data->clip_window = XCreateWindow( data->display, root_window, 0, 0, 1, 1, 0, 0,
+                                            InputOnly, default_visual.visual,
+                                            CWOverrideRedirect | CWEventMask, &attr );
+-        X11DRV_XInput2_Enable( data->display, data->clip_window, attr.event_mask );
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H                                           
++        X11DRV_XInput2_Enable( data->display, data->clip_window, attr.event_mask );   
++#endif        
+         XSelectInput( data->display, DefaultRootWindow( data->display ), PropertyChangeMask );
+         XFlush( data->display );
+         NtUserSetProp( hwnd, clip_window_prop, (HANDLE)data->clip_window );
+diff --git a/dlls/winex11.drv/x11drv.h b/dlls/winex11.drv/x11drv.h
+index 0b6ac40..0f25aea 100644
+--- a/dlls/winex11.drv/x11drv.h
++++ b/dlls/winex11.drv/x11drv.h
+@@ -567,6 +567,7 @@ enum x11drv_atoms
+     XATOM_text_rtf,
+     XATOM_text_richtext,
+     XATOM_text_uri_list,
++    XATOM__NET_WM_HWND,
+     XATOM_GAMESCOPE_FOCUSED_APP,
+     XATOM_GAMESCOPE_DISPLAY_EDID_PATH,
+     XATOM_GAMESCOPE_XALIA_OVERLAY,
+diff --git a/dlls/winex11.drv/x11drv_main.c b/dlls/winex11.drv/x11drv_main.c
+index a954f23..3b21432 100644
+--- a/dlls/winex11.drv/x11drv_main.c
++++ b/dlls/winex11.drv/x11drv_main.c
+@@ -36,7 +36,6 @@
+ #include <dlfcn.h>
+ #include <X11/cursorfont.h>
+ #include <X11/Xlib.h>
+-#include <X11/XKBlib.h>
+ #ifdef HAVE_X11_EXTENSIONS_XRENDER_H
+ #include <X11/extensions/Xrender.h>
+ #endif
+@@ -233,6 +232,7 @@ static const char * const atom_names[NB_XATOMS - FIRST_XATOM] =
+     "text/rtf",
+     "text/richtext",
+     "text/uri-list",
++    "_NET_WM_HWND",
+     "GAMESCOPE_FOCUSED_APP",
+     "GAMESCOPE_DISPLAY_EDID_PATH",
+     "GAMESCOPE_XALIA_OVERLAY",
+@@ -813,9 +813,9 @@ static NTSTATUS x11drv_init( void *arg )
+ #ifdef SONAME_LIBXCOMPOSITE
+     X11DRV_XComposite_Init();
+ #endif
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
+     x11drv_xinput2_load();
+-
+-    XkbUseExtension( gdi_display, NULL, NULL );
++#endif
+     X11DRV_InitKeyboard( gdi_display );
+     X11DRV_InitMouse( gdi_display );
+     if (use_xim) use_xim = xim_init( input_style );
+@@ -944,16 +944,15 @@ struct x11drv_thread_data *x11drv_init_thread_data(void)
+ 
+     fcntl( ConnectionNumber(data->display), F_SETFD, 1 ); /* set close on exec flag */
+ 
+-    XkbUseExtension( data->display, NULL, NULL );
+-    XkbSetDetectableAutoRepeat( data->display, True, NULL );
+     if (TRACE_ON(synchronous)) XSynchronize( data->display, True );
+ 
+     set_queue_display_fd( data->display );
+     NtUserGetThreadInfo()->driver_data = (UINT_PTR)data;
+ 
+     if (use_xim) xim_thread_attach( data );
++#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H    
+     x11drv_xinput2_init( data );
+-
++#endif
+     return data;
+ }
+ 

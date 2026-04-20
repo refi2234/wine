@@ -1,0 +1,1132 @@
+diff --git a/server/esync.c b/server/esync.c
+index a516443..9549a9c 100644
+--- a/server/esync.c
++++ b/server/esync.c
+@@ -45,6 +45,31 @@
+ #include "esync.h"
+ #include "fsync.h"
+ 
++#ifdef __ANDROID__
++static int shm_open(const char *name, int oflag, mode_t mode) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return open(fname, oflag, mode);
++}
++static int shm_unlink(const char *name) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return unlink(fname);
++}
++#endif
++
+ int do_esync(void)
+ {
+ #ifdef HAVE_SYS_EVENTFD_H
+diff --git a/server/fsync.c b/server/fsync.c
+index dc50aa0..8368e28 100644
+--- a/server/fsync.c
++++ b/server/fsync.c
+@@ -51,9 +51,35 @@
+ #define __NR_futex_waitv 449
+ #endif
+ 
++
++#ifdef __ANDROID__
++static int shm_open(const char *name, int oflag, mode_t mode) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return open(fname, oflag, mode);
++}
++static int shm_unlink(const char *name) {
++	char *tmpdir;
++	char *fname;
++	
++	tmpdir = getenv("TMPDIR");
++	if (!tmpdir) {
++		tmpdir = "/tmp";
++	}
++	asprintf(&fname, "%s/%s", tmpdir, name);
++	return unlink(fname);
++}
++#endif
++
+ int do_fsync(void)
+ {
+-#ifdef __linux__
++#if defined(__linux__) && !defined(__ANDROID__)
+     static int do_fsync_cached = -1;
+ 
+     if (do_fsync_cached == -1)
+diff --git a/server/queue.c b/server/queue.c
+index 22344f4..49d2fea 100644
+--- a/server/queue.c
++++ b/server/queue.c
+@@ -2224,18 +2224,11 @@ static int queue_mouse_message( struct desktop *desktop, user_handle_t win, cons
+         msg_data = &raw_msg.data;
+         msg_data->info                = input->mouse.info;
+         msg_data->size                = sizeof(*msg_data);
+-        msg_data->flags               = flags;
++        msg_data->flags               = flags & ~(MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK);
+         msg_data->rawinput.type       = RIM_TYPEMOUSE;
+-        if (flags & MOUSEEVENTF_ABSOLUTE)
+-        {
+-            msg_data->rawinput.mouse.x    = x;
+-            msg_data->rawinput.mouse.y    = y;
+-        }
+-        else
+-        {
+-            msg_data->rawinput.mouse.x    = input->mouse.x;
+-            msg_data->rawinput.mouse.y    = input->mouse.y;
+-        }
++        msg_data->rawinput.mouse.x    = x - desktop->shared->cursor.x;
++        msg_data->rawinput.mouse.y    = y - desktop->shared->cursor.y;
++     
+         msg_data->rawinput.mouse.data = input->mouse.data;
+ 
+         enum_processes( queue_rawinput_message, &raw_msg );
+diff --git a/server/request.h b/server/request.h
+index 89d5a62..9e37359 100644
+--- a/server/request.h
++++ b/server/request.h
+@@ -208,6 +208,7 @@ DECL_HANDLER(create_key);
+ DECL_HANDLER(open_key);
+ DECL_HANDLER(delete_key);
+ DECL_HANDLER(flush_key);
++DECL_HANDLER(flush_key_done);
+ DECL_HANDLER(enum_key);
+ DECL_HANDLER(set_key_value);
+ DECL_HANDLER(get_key_value);
+@@ -266,6 +267,7 @@ DECL_HANDLER(get_window_info);
+ DECL_HANDLER(set_window_info);
+ DECL_HANDLER(set_parent);
+ DECL_HANDLER(get_window_parents);
++DECL_HANDLER(get_window_list);
+ DECL_HANDLER(get_window_children);
+ DECL_HANDLER(get_window_children_from_point);
+ DECL_HANDLER(get_window_tree);
+@@ -312,6 +314,7 @@ DECL_HANDLER(set_active_window);
+ DECL_HANDLER(set_capture_window);
+ DECL_HANDLER(set_caret_window);
+ DECL_HANDLER(set_caret_info);
++DECL_HANDLER(get_active_hooks);
+ DECL_HANDLER(set_hook);
+ DECL_HANDLER(remove_hook);
+ DECL_HANDLER(start_hook_chain);
+@@ -348,11 +351,14 @@ DECL_HANDLER(set_token_default_dacl);
+ DECL_HANDLER(set_security_object);
+ DECL_HANDLER(get_security_object);
+ DECL_HANDLER(get_system_handles);
++DECL_HANDLER(get_tcp_connections);
++DECL_HANDLER(get_udp_endpoints);
+ DECL_HANDLER(create_mailslot);
+ DECL_HANDLER(set_mailslot_info);
+ DECL_HANDLER(create_directory);
+ DECL_HANDLER(open_directory);
+ DECL_HANDLER(get_directory_entry);
++DECL_HANDLER(query_directory_file);
+ DECL_HANDLER(create_symlink);
+ DECL_HANDLER(open_symlink);
+ DECL_HANDLER(query_symlink);
+@@ -377,6 +383,7 @@ DECL_HANDLER(create_completion);
+ DECL_HANDLER(open_completion);
+ DECL_HANDLER(add_completion);
+ DECL_HANDLER(remove_completion);
++DECL_HANDLER(get_thread_completion);
+ DECL_HANDLER(query_completion);
+ DECL_HANDLER(set_completion_info);
+ DECL_HANDLER(add_fd_completion);
+@@ -403,6 +410,17 @@ DECL_HANDLER(terminate_job);
+ DECL_HANDLER(suspend_process);
+ DECL_HANDLER(resume_process);
+ DECL_HANDLER(get_next_thread);
++DECL_HANDLER(create_esync);
++DECL_HANDLER(open_esync);
++DECL_HANDLER(get_esync_fd);
++DECL_HANDLER(esync_msgwait);
++DECL_HANDLER(get_esync_apc_fd);
++DECL_HANDLER(create_fsync);
++DECL_HANDLER(open_fsync);
++DECL_HANDLER(get_fsync_idx);
++DECL_HANDLER(fsync_msgwait);
++DECL_HANDLER(get_fsync_apc_idx);
++DECL_HANDLER(fsync_free_shm_idx);
+ 
+ #ifdef WANT_REQUEST_HANDLERS
+ 
+@@ -498,6 +516,7 @@ static const req_handler req_handlers[REQ_NB_REQUESTS] =
+     (req_handler)req_open_key,
+     (req_handler)req_delete_key,
+     (req_handler)req_flush_key,
++    (req_handler)req_flush_key_done,
+     (req_handler)req_enum_key,
+     (req_handler)req_set_key_value,
+     (req_handler)req_get_key_value,
+@@ -556,6 +575,7 @@ static const req_handler req_handlers[REQ_NB_REQUESTS] =
+     (req_handler)req_set_window_info,
+     (req_handler)req_set_parent,
+     (req_handler)req_get_window_parents,
++    (req_handler)req_get_window_list,
+     (req_handler)req_get_window_children,
+     (req_handler)req_get_window_children_from_point,
+     (req_handler)req_get_window_tree,
+@@ -602,6 +622,7 @@ static const req_handler req_handlers[REQ_NB_REQUESTS] =
+     (req_handler)req_set_capture_window,
+     (req_handler)req_set_caret_window,
+     (req_handler)req_set_caret_info,
++    (req_handler)req_get_active_hooks,
+     (req_handler)req_set_hook,
+     (req_handler)req_remove_hook,
+     (req_handler)req_start_hook_chain,
+@@ -638,11 +659,14 @@ static const req_handler req_handlers[REQ_NB_REQUESTS] =
+     (req_handler)req_set_security_object,
+     (req_handler)req_get_security_object,
+     (req_handler)req_get_system_handles,
++    (req_handler)req_get_tcp_connections,
++    (req_handler)req_get_udp_endpoints,
+     (req_handler)req_create_mailslot,
+     (req_handler)req_set_mailslot_info,
+     (req_handler)req_create_directory,
+     (req_handler)req_open_directory,
+     (req_handler)req_get_directory_entry,
++    (req_handler)req_query_directory_file,
+     (req_handler)req_create_symlink,
+     (req_handler)req_open_symlink,
+     (req_handler)req_query_symlink,
+@@ -667,6 +691,7 @@ static const req_handler req_handlers[REQ_NB_REQUESTS] =
+     (req_handler)req_open_completion,
+     (req_handler)req_add_completion,
+     (req_handler)req_remove_completion,
++    (req_handler)req_get_thread_completion,
+     (req_handler)req_query_completion,
+     (req_handler)req_set_completion_info,
+     (req_handler)req_add_fd_completion,
+@@ -693,6 +718,17 @@ static const req_handler req_handlers[REQ_NB_REQUESTS] =
+     (req_handler)req_suspend_process,
+     (req_handler)req_resume_process,
+     (req_handler)req_get_next_thread,
++    (req_handler)req_create_esync,
++    (req_handler)req_open_esync,
++    (req_handler)req_get_esync_fd,
++    (req_handler)req_esync_msgwait,
++    (req_handler)req_get_esync_apc_fd,
++    (req_handler)req_create_fsync,
++    (req_handler)req_open_fsync,
++    (req_handler)req_get_fsync_idx,
++    (req_handler)req_fsync_msgwait,
++    (req_handler)req_get_fsync_apc_idx,
++    (req_handler)req_fsync_free_shm_idx,
+ };
+ 
+ C_ASSERT( sizeof(abstime_t) == 8 );
+@@ -704,7 +740,7 @@ C_ASSERT( sizeof(async_data_t) == 40 );
+ C_ASSERT( sizeof(atom_t) == 4 );
+ C_ASSERT( sizeof(char) == 1 );
+ C_ASSERT( sizeof(client_ptr_t) == 8 );
+-C_ASSERT( sizeof(context_t) == 1720 );
++C_ASSERT( sizeof(context_t) == 1728 );
+ C_ASSERT( sizeof(cursor_pos_t) == 24 );
+ C_ASSERT( sizeof(data_size_t) == 4 );
+ C_ASSERT( sizeof(debug_event_t) == 160 );
+@@ -727,7 +763,7 @@ C_ASSERT( sizeof(select_op_t) == 264 );
+ C_ASSERT( sizeof(short int) == 2 );
+ C_ASSERT( sizeof(startup_info_t) == 96 );
+ C_ASSERT( sizeof(struct filesystem_event) == 12 );
+-C_ASSERT( sizeof(struct handle_info) == 20 );
++C_ASSERT( sizeof(struct handle_info) == 32 );
+ C_ASSERT( sizeof(struct luid) == 8 );
+ C_ASSERT( sizeof(struct luid_attr) == 12 );
+ C_ASSERT( sizeof(struct object_attributes) == 16 );
+@@ -735,8 +771,10 @@ C_ASSERT( sizeof(struct object_type_info) == 44 );
+ C_ASSERT( sizeof(struct process_info) == 40 );
+ C_ASSERT( sizeof(struct rawinput_device) == 12 );
+ C_ASSERT( sizeof(struct thread_info) == 40 );
++C_ASSERT( sizeof(tcp_connection) == 60 );
+ C_ASSERT( sizeof(thread_id_t) == 4 );
+ C_ASSERT( sizeof(timeout_t) == 8 );
++C_ASSERT( sizeof(udp_endpoint) == 32 );
+ C_ASSERT( sizeof(unsigned char) == 1 );
+ C_ASSERT( sizeof(unsigned int) == 4 );
+ C_ASSERT( sizeof(unsigned short) == 2 );
+@@ -830,7 +868,8 @@ C_ASSERT( FIELD_OFFSET(struct get_process_debug_info_reply, debug) == 8 );
+ C_ASSERT( FIELD_OFFSET(struct get_process_debug_info_reply, debug_children) == 12 );
+ C_ASSERT( sizeof(struct get_process_debug_info_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct get_process_image_name_request, handle) == 12 );
+-C_ASSERT( FIELD_OFFSET(struct get_process_image_name_request, win32) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_process_image_name_request, pid) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_process_image_name_request, win32) == 20 );
+ C_ASSERT( sizeof(struct get_process_image_name_request) == 24 );
+ C_ASSERT( FIELD_OFFSET(struct get_process_image_name_reply, len) == 8 );
+ C_ASSERT( sizeof(struct get_process_image_name_reply) == 16 );
+@@ -878,8 +917,10 @@ C_ASSERT( FIELD_OFFSET(struct set_thread_info_request, entry_point) == 32 );
+ C_ASSERT( FIELD_OFFSET(struct set_thread_info_request, token) == 40 );
+ C_ASSERT( sizeof(struct set_thread_info_request) == 48 );
+ C_ASSERT( FIELD_OFFSET(struct suspend_thread_request, handle) == 12 );
+-C_ASSERT( sizeof(struct suspend_thread_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct suspend_thread_request, waited_handle) == 16 );
++C_ASSERT( sizeof(struct suspend_thread_request) == 24 );
+ C_ASSERT( FIELD_OFFSET(struct suspend_thread_reply, count) == 8 );
++C_ASSERT( FIELD_OFFSET(struct suspend_thread_reply, wait_handle) == 12 );
+ C_ASSERT( sizeof(struct suspend_thread_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct resume_thread_request, handle) == 12 );
+ C_ASSERT( sizeof(struct resume_thread_request) == 16 );
+@@ -1084,9 +1125,9 @@ C_ASSERT( FIELD_OFFSET(struct recv_socket_reply, wait) == 8 );
+ C_ASSERT( FIELD_OFFSET(struct recv_socket_reply, options) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct recv_socket_reply, nonblocking) == 16 );
+ C_ASSERT( sizeof(struct recv_socket_reply) == 24 );
++C_ASSERT( FIELD_OFFSET(struct send_socket_request, flags) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct send_socket_request, async) == 16 );
+-C_ASSERT( FIELD_OFFSET(struct send_socket_request, force_async) == 56 );
+-C_ASSERT( sizeof(struct send_socket_request) == 64 );
++C_ASSERT( sizeof(struct send_socket_request) == 56 );
+ C_ASSERT( FIELD_OFFSET(struct send_socket_reply, wait) == 8 );
+ C_ASSERT( FIELD_OFFSET(struct send_socket_reply, options) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct send_socket_reply, nonblocking) == 16 );
+@@ -1230,7 +1271,8 @@ C_ASSERT( sizeof(struct set_debug_obj_info_request) == 24 );
+ C_ASSERT( FIELD_OFFSET(struct read_process_memory_request, handle) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct read_process_memory_request, addr) == 16 );
+ C_ASSERT( sizeof(struct read_process_memory_request) == 24 );
+-C_ASSERT( sizeof(struct read_process_memory_reply) == 8 );
++C_ASSERT( FIELD_OFFSET(struct read_process_memory_reply, unix_pid) == 8 );
++C_ASSERT( sizeof(struct read_process_memory_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct write_process_memory_request, handle) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct write_process_memory_request, addr) == 16 );
+ C_ASSERT( sizeof(struct write_process_memory_request) == 24 );
+@@ -1249,6 +1291,13 @@ C_ASSERT( FIELD_OFFSET(struct delete_key_request, hkey) == 12 );
+ C_ASSERT( sizeof(struct delete_key_request) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct flush_key_request, hkey) == 12 );
+ C_ASSERT( sizeof(struct flush_key_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct flush_key_reply, timestamp_counter) == 8 );
++C_ASSERT( FIELD_OFFSET(struct flush_key_reply, total) == 16 );
++C_ASSERT( FIELD_OFFSET(struct flush_key_reply, branch_count) == 20 );
++C_ASSERT( sizeof(struct flush_key_reply) == 24 );
++C_ASSERT( FIELD_OFFSET(struct flush_key_done_request, timestamp_counter) == 16 );
++C_ASSERT( FIELD_OFFSET(struct flush_key_done_request, branch) == 24 );
++C_ASSERT( sizeof(struct flush_key_done_request) == 32 );
+ C_ASSERT( FIELD_OFFSET(struct enum_key_request, hkey) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct enum_key_request, index) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct enum_key_request, info_class) == 20 );
+@@ -1288,8 +1337,9 @@ C_ASSERT( FIELD_OFFSET(struct unload_registry_request, parent) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct unload_registry_request, attributes) == 16 );
+ C_ASSERT( sizeof(struct unload_registry_request) == 24 );
+ C_ASSERT( FIELD_OFFSET(struct save_registry_request, hkey) == 12 );
+-C_ASSERT( FIELD_OFFSET(struct save_registry_request, file) == 16 );
+-C_ASSERT( sizeof(struct save_registry_request) == 24 );
++C_ASSERT( sizeof(struct save_registry_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct save_registry_reply, total) == 8 );
++C_ASSERT( sizeof(struct save_registry_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct set_registry_notification_request, hkey) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct set_registry_notification_request, event) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct set_registry_notification_request, subtree) == 20 );
+@@ -1418,8 +1468,7 @@ C_ASSERT( FIELD_OFFSET(struct get_message_reply, type) == 32 );
+ C_ASSERT( FIELD_OFFSET(struct get_message_reply, x) == 36 );
+ C_ASSERT( FIELD_OFFSET(struct get_message_reply, y) == 40 );
+ C_ASSERT( FIELD_OFFSET(struct get_message_reply, time) == 44 );
+-C_ASSERT( FIELD_OFFSET(struct get_message_reply, active_hooks) == 48 );
+-C_ASSERT( FIELD_OFFSET(struct get_message_reply, total) == 52 );
++C_ASSERT( FIELD_OFFSET(struct get_message_reply, total) == 48 );
+ C_ASSERT( sizeof(struct get_message_reply) == 56 );
+ C_ASSERT( FIELD_OFFSET(struct reply_message_request, remove) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct reply_message_request, result) == 16 );
+@@ -1587,6 +1636,13 @@ C_ASSERT( FIELD_OFFSET(struct get_window_parents_request, handle) == 12 );
+ C_ASSERT( sizeof(struct get_window_parents_request) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct get_window_parents_reply, count) == 8 );
+ C_ASSERT( sizeof(struct get_window_parents_reply) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_window_list_request, desktop) == 12 );
++C_ASSERT( FIELD_OFFSET(struct get_window_list_request, handle) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_window_list_request, tid) == 20 );
++C_ASSERT( FIELD_OFFSET(struct get_window_list_request, children) == 24 );
++C_ASSERT( sizeof(struct get_window_list_request) == 32 );
++C_ASSERT( FIELD_OFFSET(struct get_window_list_reply, count) == 8 );
++C_ASSERT( sizeof(struct get_window_list_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct get_window_children_request, desktop) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct get_window_children_request, parent) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct get_window_children_request, atom) == 20 );
+@@ -1757,7 +1813,8 @@ C_ASSERT( sizeof(struct enum_desktop_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct set_user_object_info_request, handle) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct set_user_object_info_request, flags) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct set_user_object_info_request, obj_flags) == 20 );
+-C_ASSERT( sizeof(struct set_user_object_info_request) == 24 );
++C_ASSERT( FIELD_OFFSET(struct set_user_object_info_request, close_timeout) == 24 );
++C_ASSERT( sizeof(struct set_user_object_info_request) == 32 );
+ C_ASSERT( FIELD_OFFSET(struct set_user_object_info_reply, is_desktop) == 8 );
+ C_ASSERT( FIELD_OFFSET(struct set_user_object_info_reply, old_obj_flags) == 12 );
+ C_ASSERT( sizeof(struct set_user_object_info_reply) == 16 );
+@@ -1785,14 +1842,11 @@ C_ASSERT( sizeof(struct get_thread_input_request) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, focus) == 8 );
+ C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, capture) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, active) == 16 );
+-C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, foreground) == 20 );
+-C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, menu_owner) == 24 );
+-C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, move_size) == 28 );
+-C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, caret) == 32 );
+-C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, cursor) == 36 );
+-C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, show_count) == 40 );
+-C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, rect) == 44 );
+-C_ASSERT( sizeof(struct get_thread_input_reply) == 64 );
++C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, menu_owner) == 20 );
++C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, move_size) == 24 );
++C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, caret) == 28 );
++C_ASSERT( FIELD_OFFSET(struct get_thread_input_reply, rect) == 32 );
++C_ASSERT( sizeof(struct get_thread_input_reply) == 48 );
+ C_ASSERT( sizeof(struct get_last_input_time_request) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct get_last_input_time_reply, time) == 8 );
+ C_ASSERT( sizeof(struct get_last_input_time_reply) == 16 );
+@@ -1814,7 +1868,8 @@ C_ASSERT( sizeof(struct set_focus_window_request) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct set_focus_window_reply, previous) == 8 );
+ C_ASSERT( sizeof(struct set_focus_window_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct set_active_window_request, handle) == 12 );
+-C_ASSERT( sizeof(struct set_active_window_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct set_active_window_request, internal_msg) == 16 );
++C_ASSERT( sizeof(struct set_active_window_request) == 24 );
+ C_ASSERT( FIELD_OFFSET(struct set_active_window_reply, previous) == 8 );
+ C_ASSERT( sizeof(struct set_active_window_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct set_capture_window_request, handle) == 12 );
+@@ -1844,6 +1899,9 @@ C_ASSERT( FIELD_OFFSET(struct set_caret_info_reply, old_rect) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct set_caret_info_reply, old_hide) == 28 );
+ C_ASSERT( FIELD_OFFSET(struct set_caret_info_reply, old_state) == 32 );
+ C_ASSERT( sizeof(struct set_caret_info_reply) == 40 );
++C_ASSERT( sizeof(struct get_active_hooks_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_active_hooks_reply, active_hooks) == 8 );
++C_ASSERT( sizeof(struct get_active_hooks_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct set_hook_request, id) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct set_hook_request, pid) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct set_hook_request, tid) == 20 );
+@@ -2071,6 +2129,13 @@ C_ASSERT( sizeof(struct get_security_object_reply) == 16 );
+ C_ASSERT( sizeof(struct get_system_handles_request) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct get_system_handles_reply, count) == 8 );
+ C_ASSERT( sizeof(struct get_system_handles_reply) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_tcp_connections_request, state_filter) == 12 );
++C_ASSERT( sizeof(struct get_tcp_connections_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_tcp_connections_reply, count) == 8 );
++C_ASSERT( sizeof(struct get_tcp_connections_reply) == 16 );
++C_ASSERT( sizeof(struct get_udp_endpoints_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_udp_endpoints_reply, count) == 8 );
++C_ASSERT( sizeof(struct get_udp_endpoints_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct create_mailslot_request, access) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct create_mailslot_request, read_timeout) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct create_mailslot_request, max_msgsize) == 24 );
+@@ -2100,6 +2165,11 @@ C_ASSERT( sizeof(struct get_directory_entry_request) == 24 );
+ C_ASSERT( FIELD_OFFSET(struct get_directory_entry_reply, total_len) == 8 );
+ C_ASSERT( FIELD_OFFSET(struct get_directory_entry_reply, name_len) == 12 );
+ C_ASSERT( sizeof(struct get_directory_entry_reply) == 16 );
++C_ASSERT( FIELD_OFFSET(struct query_directory_file_request, handle) == 12 );
++C_ASSERT( FIELD_OFFSET(struct query_directory_file_request, restart_scan) == 16 );
++C_ASSERT( sizeof(struct query_directory_file_request) == 24 );
++C_ASSERT( FIELD_OFFSET(struct query_directory_file_reply, total_len) == 8 );
++C_ASSERT( sizeof(struct query_directory_file_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct create_symlink_request, access) == 12 );
+ C_ASSERT( sizeof(struct create_symlink_request) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct create_symlink_reply, handle) == 8 );
+@@ -2181,7 +2251,8 @@ C_ASSERT( sizeof(struct get_kernel_object_handle_request) == 32 );
+ C_ASSERT( FIELD_OFFSET(struct get_kernel_object_handle_reply, handle) == 8 );
+ C_ASSERT( sizeof(struct get_kernel_object_handle_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct make_process_system_request, handle) == 12 );
+-C_ASSERT( sizeof(struct make_process_system_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct make_process_system_request, desktop_close_timeout) == 16 );
++C_ASSERT( sizeof(struct make_process_system_request) == 24 );
+ C_ASSERT( FIELD_OFFSET(struct make_process_system_reply, event) == 8 );
+ C_ASSERT( sizeof(struct make_process_system_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct get_token_info_request, handle) == 12 );
+@@ -2217,12 +2288,20 @@ C_ASSERT( FIELD_OFFSET(struct add_completion_request, information) == 32 );
+ C_ASSERT( FIELD_OFFSET(struct add_completion_request, status) == 40 );
+ C_ASSERT( sizeof(struct add_completion_request) == 48 );
+ C_ASSERT( FIELD_OFFSET(struct remove_completion_request, handle) == 12 );
+-C_ASSERT( sizeof(struct remove_completion_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct remove_completion_request, alertable) == 16 );
++C_ASSERT( sizeof(struct remove_completion_request) == 24 );
+ C_ASSERT( FIELD_OFFSET(struct remove_completion_reply, ckey) == 8 );
+ C_ASSERT( FIELD_OFFSET(struct remove_completion_reply, cvalue) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct remove_completion_reply, information) == 24 );
+ C_ASSERT( FIELD_OFFSET(struct remove_completion_reply, status) == 32 );
++C_ASSERT( FIELD_OFFSET(struct remove_completion_reply, wait_handle) == 36 );
+ C_ASSERT( sizeof(struct remove_completion_reply) == 40 );
++C_ASSERT( sizeof(struct get_thread_completion_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_thread_completion_reply, ckey) == 8 );
++C_ASSERT( FIELD_OFFSET(struct get_thread_completion_reply, cvalue) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_thread_completion_reply, information) == 24 );
++C_ASSERT( FIELD_OFFSET(struct get_thread_completion_reply, status) == 32 );
++C_ASSERT( sizeof(struct get_thread_completion_reply) == 40 );
+ C_ASSERT( FIELD_OFFSET(struct query_completion_request, handle) == 12 );
+ C_ASSERT( sizeof(struct query_completion_request) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct query_completion_reply, depth) == 8 );
+@@ -2288,10 +2367,13 @@ C_ASSERT( sizeof(struct get_cursor_history_request) == 16 );
+ C_ASSERT( sizeof(struct get_cursor_history_reply) == 8 );
+ C_ASSERT( FIELD_OFFSET(struct get_rawinput_buffer_request, rawinput_size) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct get_rawinput_buffer_request, buffer_size) == 16 );
+-C_ASSERT( sizeof(struct get_rawinput_buffer_request) == 24 );
++C_ASSERT( FIELD_OFFSET(struct get_rawinput_buffer_request, clear_qs_rawinput) == 20 );
++C_ASSERT( FIELD_OFFSET(struct get_rawinput_buffer_request, __pad) == 24 );
++C_ASSERT( sizeof(struct get_rawinput_buffer_request) == 32 );
+ C_ASSERT( FIELD_OFFSET(struct get_rawinput_buffer_reply, next_size) == 8 );
+ C_ASSERT( FIELD_OFFSET(struct get_rawinput_buffer_reply, count) == 12 );
+-C_ASSERT( sizeof(struct get_rawinput_buffer_reply) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_rawinput_buffer_reply, last_message_time) == 16 );
++C_ASSERT( sizeof(struct get_rawinput_buffer_reply) == 24 );
+ C_ASSERT( sizeof(struct update_rawinput_devices_request) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct create_job_request, access) == 12 );
+ C_ASSERT( sizeof(struct create_job_request) == 16 );
+@@ -2336,6 +2418,63 @@ C_ASSERT( FIELD_OFFSET(struct get_next_thread_request, flags) == 28 );
+ C_ASSERT( sizeof(struct get_next_thread_request) == 32 );
+ C_ASSERT( FIELD_OFFSET(struct get_next_thread_reply, handle) == 8 );
+ C_ASSERT( sizeof(struct get_next_thread_reply) == 16 );
++C_ASSERT( FIELD_OFFSET(struct create_esync_request, access) == 12 );
++C_ASSERT( FIELD_OFFSET(struct create_esync_request, initval) == 16 );
++C_ASSERT( FIELD_OFFSET(struct create_esync_request, type) == 20 );
++C_ASSERT( FIELD_OFFSET(struct create_esync_request, max) == 24 );
++C_ASSERT( sizeof(struct create_esync_request) == 32 );
++C_ASSERT( FIELD_OFFSET(struct create_esync_reply, handle) == 8 );
++C_ASSERT( FIELD_OFFSET(struct create_esync_reply, type) == 12 );
++C_ASSERT( FIELD_OFFSET(struct create_esync_reply, shm_idx) == 16 );
++C_ASSERT( sizeof(struct create_esync_reply) == 24 );
++C_ASSERT( FIELD_OFFSET(struct open_esync_request, access) == 12 );
++C_ASSERT( FIELD_OFFSET(struct open_esync_request, attributes) == 16 );
++C_ASSERT( FIELD_OFFSET(struct open_esync_request, rootdir) == 20 );
++C_ASSERT( FIELD_OFFSET(struct open_esync_request, type) == 24 );
++C_ASSERT( sizeof(struct open_esync_request) == 32 );
++C_ASSERT( FIELD_OFFSET(struct open_esync_reply, handle) == 8 );
++C_ASSERT( FIELD_OFFSET(struct open_esync_reply, type) == 12 );
++C_ASSERT( FIELD_OFFSET(struct open_esync_reply, shm_idx) == 16 );
++C_ASSERT( sizeof(struct open_esync_reply) == 24 );
++C_ASSERT( FIELD_OFFSET(struct get_esync_fd_request, handle) == 12 );
++C_ASSERT( sizeof(struct get_esync_fd_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_esync_fd_reply, type) == 8 );
++C_ASSERT( FIELD_OFFSET(struct get_esync_fd_reply, shm_idx) == 12 );
++C_ASSERT( sizeof(struct get_esync_fd_reply) == 16 );
++C_ASSERT( FIELD_OFFSET(struct esync_msgwait_request, in_msgwait) == 12 );
++C_ASSERT( sizeof(struct esync_msgwait_request) == 16 );
++C_ASSERT( sizeof(struct get_esync_apc_fd_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct create_fsync_request, access) == 12 );
++C_ASSERT( FIELD_OFFSET(struct create_fsync_request, low) == 16 );
++C_ASSERT( FIELD_OFFSET(struct create_fsync_request, high) == 20 );
++C_ASSERT( FIELD_OFFSET(struct create_fsync_request, type) == 24 );
++C_ASSERT( sizeof(struct create_fsync_request) == 32 );
++C_ASSERT( FIELD_OFFSET(struct create_fsync_reply, handle) == 8 );
++C_ASSERT( FIELD_OFFSET(struct create_fsync_reply, type) == 12 );
++C_ASSERT( FIELD_OFFSET(struct create_fsync_reply, shm_idx) == 16 );
++C_ASSERT( sizeof(struct create_fsync_reply) == 24 );
++C_ASSERT( FIELD_OFFSET(struct open_fsync_request, access) == 12 );
++C_ASSERT( FIELD_OFFSET(struct open_fsync_request, attributes) == 16 );
++C_ASSERT( FIELD_OFFSET(struct open_fsync_request, rootdir) == 20 );
++C_ASSERT( FIELD_OFFSET(struct open_fsync_request, type) == 24 );
++C_ASSERT( sizeof(struct open_fsync_request) == 32 );
++C_ASSERT( FIELD_OFFSET(struct open_fsync_reply, handle) == 8 );
++C_ASSERT( FIELD_OFFSET(struct open_fsync_reply, type) == 12 );
++C_ASSERT( FIELD_OFFSET(struct open_fsync_reply, shm_idx) == 16 );
++C_ASSERT( sizeof(struct open_fsync_reply) == 24 );
++C_ASSERT( FIELD_OFFSET(struct get_fsync_idx_request, handle) == 12 );
++C_ASSERT( sizeof(struct get_fsync_idx_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_fsync_idx_reply, type) == 8 );
++C_ASSERT( FIELD_OFFSET(struct get_fsync_idx_reply, shm_idx) == 12 );
++C_ASSERT( sizeof(struct get_fsync_idx_reply) == 16 );
++C_ASSERT( FIELD_OFFSET(struct fsync_msgwait_request, in_msgwait) == 12 );
++C_ASSERT( sizeof(struct fsync_msgwait_request) == 16 );
++C_ASSERT( sizeof(struct get_fsync_apc_idx_request) == 16 );
++C_ASSERT( FIELD_OFFSET(struct get_fsync_apc_idx_reply, shm_idx) == 8 );
++C_ASSERT( sizeof(struct get_fsync_apc_idx_reply) == 16 );
++C_ASSERT( FIELD_OFFSET(struct fsync_free_shm_idx_request, shm_idx) == 12 );
++C_ASSERT( sizeof(struct fsync_free_shm_idx_request) == 16 );
++C_ASSERT( sizeof(struct fsync_free_shm_idx_reply) == 8 );
+ 
+ #endif  /* WANT_REQUEST_HANDLERS */
+ 
+diff --git a/server/trace.c b/server/trace.c
+index e3afbc0..8529b08 100644
+--- a/server/trace.c
++++ b/server/trace.c
+@@ -1708,6 +1708,7 @@ static void dump_get_process_debug_info_reply( const struct get_process_debug_in
+ static void dump_get_process_image_name_request( const struct get_process_image_name_request *req )
+ {
+     fprintf( stderr, " handle=%04x", req->handle );
++    fprintf( stderr, ", pid=%04x", req->pid );
+     fprintf( stderr, ", win32=%d", req->win32 );
+ }
+ 
+@@ -1789,11 +1790,13 @@ static void dump_set_thread_info_request( const struct set_thread_info_request *
+ static void dump_suspend_thread_request( const struct suspend_thread_request *req )
+ {
+     fprintf( stderr, " handle=%04x", req->handle );
++    fprintf( stderr, ", waited_handle=%04x", req->waited_handle );
+ }
+ 
+ static void dump_suspend_thread_reply( const struct suspend_thread_reply *req )
+ {
+     fprintf( stderr, " count=%d", req->count );
++    fprintf( stderr, ", wait_handle=%04x", req->wait_handle );
+ }
+ 
+ static void dump_resume_thread_request( const struct resume_thread_request *req )
+@@ -2232,8 +2235,8 @@ static void dump_recv_socket_reply( const struct recv_socket_reply *req )
+ 
+ static void dump_send_socket_request( const struct send_socket_request *req )
+ {
+-    dump_async_data( " async=", &req->async );
+-    fprintf( stderr, ", force_async=%d", req->force_async );
++    fprintf( stderr, " flags=%08x", req->flags );
++    dump_async_data( ", async=", &req->async );
+ }
+ 
+ static void dump_send_socket_reply( const struct send_socket_reply *req )
+@@ -2527,7 +2530,8 @@ static void dump_read_process_memory_request( const struct read_process_memory_r
+ 
+ static void dump_read_process_memory_reply( const struct read_process_memory_reply *req )
+ {
+-    dump_varargs_bytes( " data=", cur_size );
++    fprintf( stderr, " unix_pid=%d", req->unix_pid );
++    dump_varargs_bytes( ", data=", cur_size );
+ }
+ 
+ static void dump_write_process_memory_request( const struct write_process_memory_request *req )
+@@ -2573,6 +2577,20 @@ static void dump_flush_key_request( const struct flush_key_request *req )
+     fprintf( stderr, " hkey=%04x", req->hkey );
+ }
+ 
++static void dump_flush_key_reply( const struct flush_key_reply *req )
++{
++    dump_abstime( " timestamp_counter=", &req->timestamp_counter );
++    fprintf( stderr, ", total=%u", req->total );
++    fprintf( stderr, ", branch_count=%d", req->branch_count );
++    dump_varargs_bytes( ", data=", cur_size );
++}
++
++static void dump_flush_key_done_request( const struct flush_key_done_request *req )
++{
++    dump_abstime( " timestamp_counter=", &req->timestamp_counter );
++    fprintf( stderr, ", branch=%d", req->branch );
++}
++
+ static void dump_enum_key_request( const struct enum_key_request *req )
+ {
+     fprintf( stderr, " hkey=%04x", req->hkey );
+@@ -2655,7 +2673,12 @@ static void dump_unload_registry_request( const struct unload_registry_request *
+ static void dump_save_registry_request( const struct save_registry_request *req )
+ {
+     fprintf( stderr, " hkey=%04x", req->hkey );
+-    fprintf( stderr, ", file=%04x", req->file );
++}
++
++static void dump_save_registry_reply( const struct save_registry_reply *req )
++{
++    fprintf( stderr, " total=%u", req->total );
++    dump_varargs_bytes( ", data=", cur_size );
+ }
+ 
+ static void dump_set_registry_notification_request( const struct set_registry_notification_request *req )
+@@ -2915,7 +2938,6 @@ static void dump_get_message_reply( const struct get_message_reply *req )
+     fprintf( stderr, ", x=%d", req->x );
+     fprintf( stderr, ", y=%d", req->y );
+     fprintf( stderr, ", time=%08x", req->time );
+-    fprintf( stderr, ", active_hooks=%08x", req->active_hooks );
+     fprintf( stderr, ", total=%u", req->total );
+     dump_varargs_message_data( ", data=", cur_size );
+ }
+@@ -3229,6 +3251,20 @@ static void dump_get_window_parents_reply( const struct get_window_parents_reply
+     dump_varargs_user_handles( ", parents=", cur_size );
+ }
+ 
++static void dump_get_window_list_request( const struct get_window_list_request *req )
++{
++    fprintf( stderr, " desktop=%04x", req->desktop );
++    fprintf( stderr, ", handle=%08x", req->handle );
++    fprintf( stderr, ", tid=%04x", req->tid );
++    fprintf( stderr, ", children=%d", req->children );
++}
++
++static void dump_get_window_list_reply( const struct get_window_list_reply *req )
++{
++    fprintf( stderr, " count=%d", req->count );
++    dump_varargs_user_handles( ", windows=", cur_size );
++}
++
+ static void dump_get_window_children_request( const struct get_window_children_request *req )
+ {
+     fprintf( stderr, " desktop=%04x", req->desktop );
+@@ -3588,6 +3624,7 @@ static void dump_set_user_object_info_request( const struct set_user_object_info
+     fprintf( stderr, " handle=%04x", req->handle );
+     fprintf( stderr, ", flags=%08x", req->flags );
+     fprintf( stderr, ", obj_flags=%08x", req->obj_flags );
++    dump_timeout( ", close_timeout=", &req->close_timeout );
+ }
+ 
+ static void dump_set_user_object_info_reply( const struct set_user_object_info_reply *req )
+@@ -3641,12 +3678,9 @@ static void dump_get_thread_input_reply( const struct get_thread_input_reply *re
+     fprintf( stderr, " focus=%08x", req->focus );
+     fprintf( stderr, ", capture=%08x", req->capture );
+     fprintf( stderr, ", active=%08x", req->active );
+-    fprintf( stderr, ", foreground=%08x", req->foreground );
+     fprintf( stderr, ", menu_owner=%08x", req->menu_owner );
+     fprintf( stderr, ", move_size=%08x", req->move_size );
+     fprintf( stderr, ", caret=%08x", req->caret );
+-    fprintf( stderr, ", cursor=%08x", req->cursor );
+-    fprintf( stderr, ", show_count=%d", req->show_count );
+     dump_rectangle( ", rect=", &req->rect );
+ }
+ 
+@@ -3702,6 +3736,7 @@ static void dump_set_focus_window_reply( const struct set_focus_window_reply *re
+ static void dump_set_active_window_request( const struct set_active_window_request *req )
+ {
+     fprintf( stderr, " handle=%08x", req->handle );
++    fprintf( stderr, ", internal_msg=%08x", req->internal_msg );
+ }
+ 
+ static void dump_set_active_window_reply( const struct set_active_window_reply *req )
+@@ -3754,6 +3789,15 @@ static void dump_set_caret_info_reply( const struct set_caret_info_reply *req )
+     fprintf( stderr, ", old_state=%d", req->old_state );
+ }
+ 
++static void dump_get_active_hooks_request( const struct get_active_hooks_request *req )
++{
++}
++
++static void dump_get_active_hooks_reply( const struct get_active_hooks_reply *req )
++{
++    fprintf( stderr, " active_hooks=%08x", req->active_hooks );
++}
++
+ static void dump_set_hook_request( const struct set_hook_request *req )
+ {
+     fprintf( stderr, " id=%d", req->id );
+@@ -4205,6 +4249,27 @@ static void dump_get_system_handles_reply( const struct get_system_handles_reply
+     dump_varargs_handle_infos( ", data=", cur_size );
+ }
+ 
++static void dump_get_tcp_connections_request( const struct get_tcp_connections_request *req )
++{
++    fprintf( stderr, " state_filter=%08x", req->state_filter );
++}
++
++static void dump_get_tcp_connections_reply( const struct get_tcp_connections_reply *req )
++{
++    fprintf( stderr, " count=%08x", req->count );
++    dump_varargs_tcp_connections( ", connections=", cur_size );
++}
++
++static void dump_get_udp_endpoints_request( const struct get_udp_endpoints_request *req )
++{
++}
++
++static void dump_get_udp_endpoints_reply( const struct get_udp_endpoints_reply *req )
++{
++    fprintf( stderr, " count=%08x", req->count );
++    dump_varargs_udp_endpoints( ", endpoints=", cur_size );
++}
++
+ static void dump_create_mailslot_request( const struct create_mailslot_request *req )
+ {
+     fprintf( stderr, " access=%08x", req->access );
+@@ -4269,6 +4334,18 @@ static void dump_get_directory_entry_reply( const struct get_directory_entry_rep
+     dump_varargs_unicode_str( ", type=", cur_size );
+ }
+ 
++static void dump_query_directory_file_request( const struct query_directory_file_request *req )
++{
++    fprintf( stderr, " handle=%04x", req->handle );
++    fprintf( stderr, ", restart_scan=%08x", req->restart_scan );
++}
++
++static void dump_query_directory_file_reply( const struct query_directory_file_reply *req )
++{
++    fprintf( stderr, " total_len=%u", req->total_len );
++    dump_varargs_directory_file_entries( ", entries=", cur_size );
++}
++
+ static void dump_create_symlink_request( const struct create_symlink_request *req )
+ {
+     fprintf( stderr, " access=%08x", req->access );
+@@ -4449,6 +4526,7 @@ static void dump_get_kernel_object_handle_reply( const struct get_kernel_object_
+ static void dump_make_process_system_request( const struct make_process_system_request *req )
+ {
+     fprintf( stderr, " handle=%04x", req->handle );
++    dump_timeout( ", desktop_close_timeout=", &req->desktop_close_timeout );
+ }
+ 
+ static void dump_make_process_system_reply( const struct make_process_system_reply *req )
+@@ -4520,9 +4598,23 @@ static void dump_add_completion_request( const struct add_completion_request *re
+ static void dump_remove_completion_request( const struct remove_completion_request *req )
+ {
+     fprintf( stderr, " handle=%04x", req->handle );
++    fprintf( stderr, ", alertable=%d", req->alertable );
+ }
+ 
+ static void dump_remove_completion_reply( const struct remove_completion_reply *req )
++{
++    dump_uint64( " ckey=", &req->ckey );
++    dump_uint64( ", cvalue=", &req->cvalue );
++    dump_uint64( ", information=", &req->information );
++    fprintf( stderr, ", status=%08x", req->status );
++    fprintf( stderr, ", wait_handle=%04x", req->wait_handle );
++}
++
++static void dump_get_thread_completion_request( const struct get_thread_completion_request *req )
++{
++}
++
++static void dump_get_thread_completion_reply( const struct get_thread_completion_reply *req )
+ {
+     dump_uint64( " ckey=", &req->ckey );
+     dump_uint64( ", cvalue=", &req->cvalue );
+@@ -4654,12 +4746,14 @@ static void dump_get_rawinput_buffer_request( const struct get_rawinput_buffer_r
+ {
+     fprintf( stderr, " rawinput_size=%u", req->rawinput_size );
+     fprintf( stderr, ", buffer_size=%u", req->buffer_size );
++    fprintf( stderr, ", clear_qs_rawinput=%d", req->clear_qs_rawinput );
+ }
+ 
+ static void dump_get_rawinput_buffer_reply( const struct get_rawinput_buffer_reply *req )
+ {
+     fprintf( stderr, " next_size=%u", req->next_size );
+     fprintf( stderr, ", count=%08x", req->count );
++    fprintf( stderr, ", last_message_time=%08x", req->last_message_time );
+     dump_varargs_bytes( ", data=", cur_size );
+ }
+ 
+@@ -4759,6 +4853,120 @@ static void dump_get_next_thread_reply( const struct get_next_thread_reply *req
+     fprintf( stderr, " handle=%04x", req->handle );
+ }
+ 
++static void dump_create_esync_request( const struct create_esync_request *req )
++{
++    fprintf( stderr, " access=%08x", req->access );
++    fprintf( stderr, ", initval=%d", req->initval );
++    fprintf( stderr, ", type=%d", req->type );
++    fprintf( stderr, ", max=%d", req->max );
++    dump_varargs_object_attributes( ", objattr=", cur_size );
++}
++
++static void dump_create_esync_reply( const struct create_esync_reply *req )
++{
++    fprintf( stderr, " handle=%04x", req->handle );
++    fprintf( stderr, ", type=%d", req->type );
++    fprintf( stderr, ", shm_idx=%08x", req->shm_idx );
++}
++
++static void dump_open_esync_request( const struct open_esync_request *req )
++{
++    fprintf( stderr, " access=%08x", req->access );
++    fprintf( stderr, ", attributes=%08x", req->attributes );
++    fprintf( stderr, ", rootdir=%04x", req->rootdir );
++    fprintf( stderr, ", type=%d", req->type );
++    dump_varargs_unicode_str( ", name=", cur_size );
++}
++
++static void dump_open_esync_reply( const struct open_esync_reply *req )
++{
++    fprintf( stderr, " handle=%04x", req->handle );
++    fprintf( stderr, ", type=%d", req->type );
++    fprintf( stderr, ", shm_idx=%08x", req->shm_idx );
++}
++
++static void dump_get_esync_fd_request( const struct get_esync_fd_request *req )
++{
++    fprintf( stderr, " handle=%04x", req->handle );
++}
++
++static void dump_get_esync_fd_reply( const struct get_esync_fd_reply *req )
++{
++    fprintf( stderr, " type=%d", req->type );
++    fprintf( stderr, ", shm_idx=%08x", req->shm_idx );
++}
++
++static void dump_esync_msgwait_request( const struct esync_msgwait_request *req )
++{
++    fprintf( stderr, " in_msgwait=%d", req->in_msgwait );
++}
++
++static void dump_get_esync_apc_fd_request( const struct get_esync_apc_fd_request *req )
++{
++}
++
++static void dump_create_fsync_request( const struct create_fsync_request *req )
++{
++    fprintf( stderr, " access=%08x", req->access );
++    fprintf( stderr, ", low=%d", req->low );
++    fprintf( stderr, ", high=%d", req->high );
++    fprintf( stderr, ", type=%d", req->type );
++    dump_varargs_object_attributes( ", objattr=", cur_size );
++}
++
++static void dump_create_fsync_reply( const struct create_fsync_reply *req )
++{
++    fprintf( stderr, " handle=%04x", req->handle );
++    fprintf( stderr, ", type=%d", req->type );
++    fprintf( stderr, ", shm_idx=%08x", req->shm_idx );
++}
++
++static void dump_open_fsync_request( const struct open_fsync_request *req )
++{
++    fprintf( stderr, " access=%08x", req->access );
++    fprintf( stderr, ", attributes=%08x", req->attributes );
++    fprintf( stderr, ", rootdir=%04x", req->rootdir );
++    fprintf( stderr, ", type=%d", req->type );
++    dump_varargs_unicode_str( ", name=", cur_size );
++}
++
++static void dump_open_fsync_reply( const struct open_fsync_reply *req )
++{
++    fprintf( stderr, " handle=%04x", req->handle );
++    fprintf( stderr, ", type=%d", req->type );
++    fprintf( stderr, ", shm_idx=%08x", req->shm_idx );
++}
++
++static void dump_get_fsync_idx_request( const struct get_fsync_idx_request *req )
++{
++    fprintf( stderr, " handle=%04x", req->handle );
++}
++
++static void dump_get_fsync_idx_reply( const struct get_fsync_idx_reply *req )
++{
++    fprintf( stderr, " type=%d", req->type );
++    fprintf( stderr, ", shm_idx=%08x", req->shm_idx );
++}
++
++static void dump_fsync_msgwait_request( const struct fsync_msgwait_request *req )
++{
++    fprintf( stderr, " in_msgwait=%d", req->in_msgwait );
++}
++
++static void dump_get_fsync_apc_idx_request( const struct get_fsync_apc_idx_request *req )
++{
++}
++
++static void dump_get_fsync_apc_idx_reply( const struct get_fsync_apc_idx_reply *req )
++{
++    fprintf( stderr, " shm_idx=%08x", req->shm_idx );
++}
++
++static void dump_fsync_free_shm_idx_request( const struct fsync_free_shm_idx_request *req )
++{
++    fprintf( stderr, " shm_idx=%08x", req->shm_idx );
++}
++
+ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_new_process_request,
+     (dump_func)dump_get_new_process_info_request,
+@@ -4849,6 +5057,7 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_open_key_request,
+     (dump_func)dump_delete_key_request,
+     (dump_func)dump_flush_key_request,
++    (dump_func)dump_flush_key_done_request,
+     (dump_func)dump_enum_key_request,
+     (dump_func)dump_set_key_value_request,
+     (dump_func)dump_get_key_value_request,
+@@ -4907,6 +5116,7 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_set_window_info_request,
+     (dump_func)dump_set_parent_request,
+     (dump_func)dump_get_window_parents_request,
++    (dump_func)dump_get_window_list_request,
+     (dump_func)dump_get_window_children_request,
+     (dump_func)dump_get_window_children_from_point_request,
+     (dump_func)dump_get_window_tree_request,
+@@ -4953,6 +5163,7 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_set_capture_window_request,
+     (dump_func)dump_set_caret_window_request,
+     (dump_func)dump_set_caret_info_request,
++    (dump_func)dump_get_active_hooks_request,
+     (dump_func)dump_set_hook_request,
+     (dump_func)dump_remove_hook_request,
+     (dump_func)dump_start_hook_chain_request,
+@@ -4989,11 +5200,14 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_set_security_object_request,
+     (dump_func)dump_get_security_object_request,
+     (dump_func)dump_get_system_handles_request,
++    (dump_func)dump_get_tcp_connections_request,
++    (dump_func)dump_get_udp_endpoints_request,
+     (dump_func)dump_create_mailslot_request,
+     (dump_func)dump_set_mailslot_info_request,
+     (dump_func)dump_create_directory_request,
+     (dump_func)dump_open_directory_request,
+     (dump_func)dump_get_directory_entry_request,
++    (dump_func)dump_query_directory_file_request,
+     (dump_func)dump_create_symlink_request,
+     (dump_func)dump_open_symlink_request,
+     (dump_func)dump_query_symlink_request,
+@@ -5018,6 +5232,7 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_open_completion_request,
+     (dump_func)dump_add_completion_request,
+     (dump_func)dump_remove_completion_request,
++    (dump_func)dump_get_thread_completion_request,
+     (dump_func)dump_query_completion_request,
+     (dump_func)dump_set_completion_info_request,
+     (dump_func)dump_add_fd_completion_request,
+@@ -5044,6 +5259,17 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_suspend_process_request,
+     (dump_func)dump_resume_process_request,
+     (dump_func)dump_get_next_thread_request,
++    (dump_func)dump_create_esync_request,
++    (dump_func)dump_open_esync_request,
++    (dump_func)dump_get_esync_fd_request,
++    (dump_func)dump_esync_msgwait_request,
++    (dump_func)dump_get_esync_apc_fd_request,
++    (dump_func)dump_create_fsync_request,
++    (dump_func)dump_open_fsync_request,
++    (dump_func)dump_get_fsync_idx_request,
++    (dump_func)dump_fsync_msgwait_request,
++    (dump_func)dump_get_fsync_apc_idx_request,
++    (dump_func)dump_fsync_free_shm_idx_request,
+ };
+ 
+ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
+@@ -5135,6 +5361,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_create_key_reply,
+     (dump_func)dump_open_key_reply,
+     NULL,
++    (dump_func)dump_flush_key_reply,
+     NULL,
+     (dump_func)dump_enum_key_reply,
+     NULL,
+@@ -5143,7 +5370,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
+     NULL,
+     NULL,
+     NULL,
+-    NULL,
++    (dump_func)dump_save_registry_reply,
+     NULL,
+     NULL,
+     (dump_func)dump_create_timer_reply,
+@@ -5194,6 +5421,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_set_window_info_reply,
+     (dump_func)dump_set_parent_reply,
+     (dump_func)dump_get_window_parents_reply,
++    (dump_func)dump_get_window_list_reply,
+     (dump_func)dump_get_window_children_reply,
+     (dump_func)dump_get_window_children_from_point_reply,
+     (dump_func)dump_get_window_tree_reply,
+@@ -5240,6 +5468,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_set_capture_window_reply,
+     (dump_func)dump_set_caret_window_reply,
+     (dump_func)dump_set_caret_info_reply,
++    (dump_func)dump_get_active_hooks_reply,
+     (dump_func)dump_set_hook_reply,
+     (dump_func)dump_remove_hook_reply,
+     (dump_func)dump_start_hook_chain_reply,
+@@ -5276,11 +5505,14 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
+     NULL,
+     (dump_func)dump_get_security_object_reply,
+     (dump_func)dump_get_system_handles_reply,
++    (dump_func)dump_get_tcp_connections_reply,
++    (dump_func)dump_get_udp_endpoints_reply,
+     (dump_func)dump_create_mailslot_reply,
+     (dump_func)dump_set_mailslot_info_reply,
+     (dump_func)dump_create_directory_reply,
+     (dump_func)dump_open_directory_reply,
+     (dump_func)dump_get_directory_entry_reply,
++    (dump_func)dump_query_directory_file_reply,
+     (dump_func)dump_create_symlink_reply,
+     (dump_func)dump_open_symlink_reply,
+     (dump_func)dump_query_symlink_reply,
+@@ -5305,6 +5537,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_open_completion_reply,
+     NULL,
+     (dump_func)dump_remove_completion_reply,
++    (dump_func)dump_get_thread_completion_reply,
+     (dump_func)dump_query_completion_reply,
+     NULL,
+     NULL,
+@@ -5331,6 +5564,17 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
+     NULL,
+     NULL,
+     (dump_func)dump_get_next_thread_reply,
++    (dump_func)dump_create_esync_reply,
++    (dump_func)dump_open_esync_reply,
++    (dump_func)dump_get_esync_fd_reply,
++    NULL,
++    NULL,
++    (dump_func)dump_create_fsync_reply,
++    (dump_func)dump_open_fsync_reply,
++    (dump_func)dump_get_fsync_idx_reply,
++    NULL,
++    (dump_func)dump_get_fsync_apc_idx_reply,
++    NULL,
+ };
+ 
+ static const char * const req_names[REQ_NB_REQUESTS] = {
+@@ -5423,6 +5667,7 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
+     "open_key",
+     "delete_key",
+     "flush_key",
++    "flush_key_done",
+     "enum_key",
+     "set_key_value",
+     "get_key_value",
+@@ -5481,6 +5726,7 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
+     "set_window_info",
+     "set_parent",
+     "get_window_parents",
++    "get_window_list",
+     "get_window_children",
+     "get_window_children_from_point",
+     "get_window_tree",
+@@ -5527,6 +5773,7 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
+     "set_capture_window",
+     "set_caret_window",
+     "set_caret_info",
++    "get_active_hooks",
+     "set_hook",
+     "remove_hook",
+     "start_hook_chain",
+@@ -5563,11 +5810,14 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
+     "set_security_object",
+     "get_security_object",
+     "get_system_handles",
++    "get_tcp_connections",
++    "get_udp_endpoints",
+     "create_mailslot",
+     "set_mailslot_info",
+     "create_directory",
+     "open_directory",
+     "get_directory_entry",
++    "query_directory_file",
+     "create_symlink",
+     "open_symlink",
+     "query_symlink",
+@@ -5592,6 +5842,7 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
+     "open_completion",
+     "add_completion",
+     "remove_completion",
++    "get_thread_completion",
+     "query_completion",
+     "set_completion_info",
+     "add_fd_completion",
+@@ -5618,6 +5869,17 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
+     "suspend_process",
+     "resume_process",
+     "get_next_thread",
++    "create_esync",
++    "open_esync",
++    "get_esync_fd",
++    "esync_msgwait",
++    "get_esync_apc_fd",
++    "create_fsync",
++    "open_fsync",
++    "get_fsync_idx",
++    "fsync_msgwait",
++    "get_fsync_apc_idx",
++    "fsync_free_shm_idx",
+ };
+ 
+ static const struct
+@@ -5715,6 +5977,7 @@ static const struct
+     { "NO_IMPERSONATION_TOKEN",      STATUS_NO_IMPERSONATION_TOKEN },
+     { "NO_MEMORY",                   STATUS_NO_MEMORY },
+     { "NO_MORE_ENTRIES",             STATUS_NO_MORE_ENTRIES },
++    { "NO_MORE_FILES",               STATUS_NO_MORE_FILES },
+     { "NO_SUCH_DEVICE",              STATUS_NO_SUCH_DEVICE },
+     { "NO_SUCH_FILE",                STATUS_NO_SUCH_FILE },
+     { "NO_TOKEN",                    STATUS_NO_TOKEN },

@@ -1,0 +1,34 @@
+{
+  "patches": [
+    {
+      "id": "pipetto-dnsapi",
+      "description": "Pipetto dnsapi tweaks",
+      "path": "pipetto-perf-bundle/pipetto-dnsapi.patch"
+    },
+    {
+      "id": "pipetto-nsiproxy",
+      "description": "Pipetto nsiproxy network tweaks",
+      "path": "pipetto-perf-bundle/pipetto-nsiproxy.patch"
+    },
+    {
+      "id": "pipetto-server",
+      "description": "Pipetto server sync/perf changes",
+      "path": "pipetto-perf-bundle/pipetto-server.patch"
+    },
+    {
+      "id": "pipetto-ntdll-unix",
+      "description": "Pipetto ntdll unix sync/runtime changes",
+      "path": "pipetto-perf-bundle/pipetto-ntdll-unix.patch"
+    },
+    {
+      "id": "pipetto-winex11",
+      "description": "Pipetto winex11 performance and fullscreen changes",
+      "path": "pipetto-perf-bundle/pipetto-winex11.patch"
+    },
+    {
+      "id": "pipetto-winepulse",
+      "description": "Pipetto winepulse android mutex change",
+      "path": "pipetto-perf-bundle/pipetto-winepulse.patch"
+    }
+  ]
+}

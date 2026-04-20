@@ -54,6 +54,11 @@ on:
         required: false
         default: false
         type: boolean
+      enable_pipetto_perf_patches:
+        description: Apply local Pipetto performance patch bundle for plain Wine
+        required: false
+        default: false
+        type: boolean
       release_description:
         description: Optional extra text for the release notes
         required: false
@@ -87,6 +92,7 @@ jobs:
           set -euo pipefail
           FORCE_BUILD="${{ github.event.inputs.force_build || 'false' }}"
           EXTRA_PATCHES="${{ github.event.inputs.enable_extra_patches || 'false' }}"
+          PIPETTO_PATCHES="${{ github.event.inputs.enable_pipetto_perf_patches || 'false' }}"
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -103,7 +109,7 @@ jobs:
           WINE_HASH="$(git -C wine-plan-source rev-parse --short HEAD)"
           PREV_WINE_HASH="$(python3 -c 'import json; from pathlib import Path; data = json.loads(Path("toolkit/android-wine-proton/latest.json").read_text(encoding="utf-8")); print(data.get("artifacts", {}).get("wine", {}).get("gitHash", ""))')"
           WINE_SKIP=true
-          if [ "$FORCE_BUILD" = true ] || [ "$EXTRA_PATCHES" = true ] || [ "$WINE_HASH" != "$PREV_WINE_HASH" ]; then
+          if [ "$FORCE_BUILD" = true ] || [ "$EXTRA_PATCHES" = true ] || [ "$PIPETTO_PATCHES" = true ] || [ "$WINE_HASH" != "$PREV_WINE_HASH" ]; then
             WINE_SKIP=false
           fi
           rm -rf wine-plan-source
@@ -197,6 +203,12 @@ jobs:
         shell: bash
         run: |
           bash "$TOOLKIT_DIR/scripts/apply-ref4ik-bionic-patches.sh" "$GITHUB_WORKSPACE/wine-source"
+
+      - name: Apply optional Pipetto Wine patch bundle
+        if: ${{ github.event.inputs.enable_pipetto_perf_patches == 'true' }}
+        shell: bash
+        run: |
+          bash "$TOOLKIT_DIR/scripts/apply-pipetto-wine-patches.sh" "$GITHUB_WORKSPACE/wine-source"
 
       - name: Apply optional extra Wine patch bundle
         if: ${{ github.event.inputs.enable_extra_patches == 'true' }}
