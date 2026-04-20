@@ -41,29 +41,31 @@ done
 python3 "$SCRIPT_DIR/ensure-ref4ik-required-android-fixes.py" "$SOURCE_DIR"
 
 supports_ref4ik_esync_patch() {
-    [[ -f "$SOURCE_DIR/dlls/ntdll/unix/esync.c" ]] || return 1
-    [[ -f "$SOURCE_DIR/dlls/ntdll/unix/esync.h" ]] || return 1
-    [[ -f "$SOURCE_DIR/server/esync.c" ]] || return 1
-    [[ -f "$SOURCE_DIR/server/esync.h" ]] || return 1
+    [[ -f "$SOURCE_DIR/server/Makefile.in" ]] || return 1
+    [[ -f "$SOURCE_DIR/server/protocol.def" ]] || return 1
+    [[ -f "$SOURCE_DIR/server/request.h" ]] || return 1
+    [[ -f "$SOURCE_DIR/dlls/ntdll/unix/server.c" ]] || return 1
+    [[ -f "$SOURCE_DIR/dlls/ntdll/unix/sync.c" ]] || return 1
+    [[ -f "$SOURCE_DIR/dlls/ntdll/unix/unix_private.h" ]] || return 1
     return 0
 }
 
 if supports_ref4ik_esync_patch; then
     if bash "$SCRIPT_DIR/apply_patch_series.sh" "$SOURCE_DIR" "$OPTIONAL_ESYNC_PATCH"; then
         applied=$((applied + 1))
-        if [[ ! -f "$SOURCE_DIR/dlls/ntdll/unix/esync.h" || ! -f "$SOURCE_DIR/server/esync.h" ]]; then
-            echo "WARNING: REF4IK esync patch left source tree in an incomplete state; rolling it back"
+        if [[ ! -f "$SOURCE_DIR/dlls/ntdll/unix/esync.c" || ! -f "$SOURCE_DIR/server/esync.c" ]]; then
+            echo "WARNING: REF4IK legacy esync bundle left source tree in an incomplete state; rolling it back"
             git -C "$SOURCE_DIR" reset --hard HEAD >/dev/null 2>&1 || true
             git -C "$SOURCE_DIR" clean -fd >/dev/null 2>&1 || true
             applied=$((applied - 1))
             skipped=$((skipped + 1))
         fi
     else
-        echo "WARNING: skipping optional REF4IK patch that no longer applies cleanly: $(basename "$OPTIONAL_ESYNC_PATCH")"
+        echo "WARNING: skipping optional REF4IK legacy esync bundle because it no longer applies cleanly: $(basename "$OPTIONAL_ESYNC_PATCH")"
         skipped=$((skipped + 1))
     fi
 else
-    echo "WARNING: skipping optional REF4IK esync patch because this Wine source lacks esync header support"
+    echo "WARNING: skipping optional REF4IK legacy esync bundle because this Wine source lacks the older server/ntdll sync files it needs"
     skipped=$((skipped + 1))
 fi
 
