@@ -575,7 +575,7 @@ index dd1f34b9c74..64e0df59280 100755
  if ${CAPSTONE_PE_LIBS:+false} :
  then :
    CAPSTONE_PE_LIBS=capstone
-@@ -20730,6 +20756,7 @@ enable_vcruntime140_1=${enable_vcruntime140_1:-x86_64,arm64ec}
+@@ -21754,6 +21755,7 @@ enable_vcruntime140_1=${enable_vcruntime140_1:-x86_64,arm64ec}
  
  if test -n "$PE_ARCHS"
  then
@@ -583,8 +583,7 @@ index dd1f34b9c74..64e0df59280 100755
      enable_wow64=${enable_wow64:-aarch64,x86_64}
      enable_wow64win=${enable_wow64win:-aarch64,x86_64}
      enable_wow64cpu=${enable_wow64cpu:-x86_64}
-@@ -20737,6 +20764,7 @@ then
-     enable_xtajit=${enable_xtajit:-aarch64,x86_64}
+@@ -21761,6 +21763,7 @@ then
      enable_xtajit64=${enable_xtajit64:-arm64ec}
  else
 +    enable_box64cpu=${enable_box64cpu:-no}
@@ -628,7 +627,7 @@ index 28f9bfdd167..531924844df 100644
  WINE_EXTLIB_FLAGS(CAPSTONE, capstone, capstone, "-I\$(top_srcdir)/libs/capstone/include")
  WINE_EXTLIB_FLAGS(FAUDIO, faudio, "faudio mfplat mfreadwrite mfuuid propsys", "-I\$(top_srcdir)/libs/faudio/include")
  WINE_EXTLIB_FLAGS(FLUIDSYNTH, fluidsynth, "fluidsynth", "-I\$(top_srcdir)/libs/fluidsynth/include")
-@@ -2336,6 +2337,7 @@ enable_vcruntime140_1=${enable_vcruntime140_1:-x86_64,arm64ec}
+@@ -2335,6 +2336,7 @@ enable_vcruntime140_1=${enable_vcruntime140_1:-x86_64,arm64ec}
  
  if test -n "$PE_ARCHS"
  then
@@ -636,8 +635,7 @@ index 28f9bfdd167..531924844df 100644
      enable_wow64=${enable_wow64:-aarch64,x86_64}
      enable_wow64win=${enable_wow64win:-aarch64,x86_64}
      enable_wow64cpu=${enable_wow64cpu:-x86_64}
-@@ -2343,6 +2345,7 @@ then
-     enable_xtajit=${enable_xtajit:-aarch64,x86_64}
+@@ -2342,6 +2344,7 @@ then
      enable_xtajit64=${enable_xtajit64:-arm64ec}
  else
 +    enable_box64cpu=${enable_box64cpu:-no}
