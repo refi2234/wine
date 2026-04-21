@@ -21,6 +21,11 @@
       "path": "arm64ec-support-bundle/0004-ntdll-Only-copy-LOWORD-of-x86-segments.patch"
     },
     {
+      "id": "arm64ec-0004a-restore-zydis",
+      "description": "Revert libs: Remove the no longer used Zydis library",
+      "path": "arm64ec-support-bundle/0004a-Revert-libs-Remove-the-no-longer-used-Zydis-library.patch"
+    },
+    {
       "id": "arm64ec-0005-box64cpu-library",
       "description": "box64cpu: Add Box64 based library",
       "path": "arm64ec-support-bundle/0005-box64cpu-Add-Box64-based-library.patch"
