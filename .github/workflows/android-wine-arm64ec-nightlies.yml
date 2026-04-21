@@ -1,0 +1,326 @@
+name: Android Wine ARM64EC Nightlies
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner to use
+        required: false
+        default: ubuntu-24.04
+        type: choice
+        options:
+          - ubuntu-24.04
+          - self-hosted
+      target_app_id:
+        description: Target Android app id for package paths
+        required: false
+        default: app.gamenative
+        type: choice
+        options:
+          - app.gamenative
+          - com.winlator.cmod
+      wine_repo:
+        description: Upstream repo for ARM64EC-capable plain Wine build
+        required: false
+        default: https://github.com/Pipetto-crypto/wine.git
+        type: string
+      wine_ref:
+        description: ARM64EC Wine ref
+        required: false
+        default: arm64ec-esync
+        type: string
+      wine_version_label:
+        description: Internal runtime label used for install/release packaging
+        required: false
+        default: wine-arm64ec
+        type: string
+      wine_display_version:
+        description: Version string to write into the profile versionName
+        required: false
+        default: "11.0"
+        type: string
+      wine_profile_arch_suffix:
+        description: Suffix to append in the profile versionName after the version string
+        required: false
+        default: arm64ec
+        type: string
+      wine_version_code:
+        description: Version code to use inside the ARM64EC Wine profile
+        required: false
+        default: "1"
+        type: string
+      wine_profile_description:
+        description: Profile description prefix for ARM64EC Wine
+        required: false
+        default: "Wine ARM64EC build"
+        type: string
+      prefix_pack_url:
+        description: Prefix pack URL for the generated plain Wine ARM64EC profile
+        required: false
+        default: https://github.com/thjjfyu/winebionreg/releases/download/Dddf/prefixPack.tzst
+        type: string
+      release_description:
+        description: Optional extra text for the release notes
+        required: false
+        default: ""
+        type: string
+      force_build:
+        description: Force a build even if the tracked upstream hash is unchanged
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  TOOLKIT_DIR: toolkit/android-wine-proton
+
+jobs:
+  prepare:
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-24.04' }}
+    outputs:
+      wine_skip: ${{ steps.plan.outputs.wine_skip }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Resolve ARM64EC Wine build plan
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          FORCE_BUILD="${{ github.event.inputs.force_build || 'false' }}"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("toolkit/android-wine-proton/latest.json")
+          if not path.exists():
+              path.write_text(json.dumps({"artifacts": {}}, indent=2) + "\n", encoding="utf-8")
+          PY
+          rm -rf wine-plan-source
+          WINE_REPO="${{ github.event.inputs.wine_repo || 'https://github.com/Pipetto-crypto/wine.git' }}"
+          WINE_REF="${{ github.event.inputs.wine_ref || 'arm64ec-esync' }}"
+          git clone --depth=1 "$WINE_REPO" wine-plan-source || git clone "$WINE_REPO" wine-plan-source
+          git -C wine-plan-source fetch --depth=1 origin "$WINE_REF"
+          git -C wine-plan-source checkout FETCH_HEAD
+          WINE_HASH="$(git -C wine-plan-source rev-parse --short HEAD)"
+          PREV_WINE_HASH="$(python3 -c 'import json; from pathlib import Path; data = json.loads(Path("toolkit/android-wine-proton/latest.json").read_text(encoding="utf-8")); print(data.get("artifacts", {}).get("wineArm64ec", {}).get("gitHash", ""))')"
+          WINE_SKIP=true
+          if [ "$FORCE_BUILD" = true ] || [ "$WINE_HASH" != "$PREV_WINE_HASH" ]; then
+            WINE_SKIP=false
+          fi
+          rm -rf wine-plan-source
+          echo "wine_skip=$WINE_SKIP" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.wine_skip != 'true'
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-24.04' }}
+    timeout-minutes: 300
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential gcc-multilib git wget curl unzip flex bison gettext \
+            autoconf automake libtool pkg-config mingw-w64 patch xz-utils zstd \
+            python3-zstandard debhelper-compat=13 libz-mingw-w64-dev lzma quilt \
+            icoutils sharutils dctrl-tools imagemagick librsvg2-bin fontforge-nox \
+            khronos-api unicode-data unicode-idna libgl-dev libxi-dev libxt-dev \
+            libxmu-dev libx11-dev libxinerama-dev libxcursor-dev libxext-dev \
+            libxfixes-dev libxrandr-dev libxrender-dev libxkbfile-dev libxxf86vm-dev \
+            libxxf86dga-dev libglu1-mesa-dev libxcomposite-dev libxkbregistry-dev \
+            libxml-libxml-perl libssl-dev libv4l-dev libsdl2-dev libkrb5-dev \
+            libudev-dev libpulse-dev libldap2-dev unixodbc-dev libcups2-dev \
+            libcapi20-dev libvulkan-dev libvulkan-dev:i386 libopenal-dev libdbus-1-dev \
+            freeglut3-dev libunwind-dev libpcap0.8-dev libasound2-dev libgphoto2-dev \
+            libosmesa6-dev libncurses-dev libwayland-dev libfreetype-dev \
+            libgnutls28-dev libpcsclite-dev libusb-1.0-0-dev libgettextpo-dev \
+            libfontconfig-dev ocl-icd-opencl-dev libgstreamer-plugins-base1.0-dev \
+            libdrm2 libdrm-dev libdrm2:i386 libdrm-dev:i386 libx11-dev:i386 \
+            libfreetype6-dev:i386 libxcursor-dev:i386 libxi-dev:i386 \
+            libxshmfence-dev:i386 libxxf86vm-dev:i386 libxrandr-dev:i386 \
+            libxinerama-dev:i386 libxcomposite-dev:i386 libglu1-mesa-dev:i386 \
+            libdbus-1-dev:i386 libncurses5-dev:i386 libsane-dev:i386 libv4l-dev:i386 \
+            libgphoto2-dev:i386 liblcms2-dev:i386 libcapi20-dev:i386 libcups2-dev:i386 \
+            libfontconfig1-dev:i386 libgsm1-dev:i386 libtiff5-dev:i386 \
+            libmpg123-dev:i386 libopenal-dev:i386 libldap2-dev:i386 libjpeg-dev:i386
+
+      - name: Prepare imagefs
+        shell: bash
+        run: |
+          mkdir -p "$HOME/imagefs" "$TOOLKIT_DIR/scripts/reference/extracted"
+          wget -q https://github.com/TGP-17/termux-on-gha/releases/download/test/termuxfs.tar -O "$HOME/imagefs/termuxfs.tar"
+          tar -xf "$HOME/imagefs/termuxfs.tar" -C "$HOME/imagefs"
+          sudo mv "$HOME/imagefs/data" / || true
+          sudo chown -R "$(id -u):$(id -g)" /data
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Android NDK
+        id: setup_ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
+          add-to-path: false
+          link-to-sdk: true
+
+      - name: Clone ARM64EC Wine source
+        shell: bash
+        run: |
+          set -euo pipefail
+          WINE_REPO="${{ github.event.inputs.wine_repo || 'https://github.com/Pipetto-crypto/wine.git' }}"
+          WINE_REF="${{ github.event.inputs.wine_ref || 'arm64ec-esync' }}"
+          git clone --depth=1 "$WINE_REPO" wine-source || git clone "$WINE_REPO" wine-source
+          git -C wine-source fetch --depth=1 origin "$WINE_REF"
+          git -C wine-source checkout FETCH_HEAD
+
+      - name: Build plain Wine ARM64EC package
+        shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup_ndk.outputs.ndk-path }}
+          PROFILE_VERSION: ${{ github.event.inputs.wine_version_label || 'wine-arm64ec' }}
+          WINE_DISPLAY_VERSION: ${{ github.event.inputs.wine_display_version || '11.0' }}
+          PROFILE_ARCH_SUFFIX: ${{ github.event.inputs.wine_profile_arch_suffix || 'arm64ec' }}
+          PROFILE_VERSION_CODE: ${{ github.event.inputs.wine_version_code || '1' }}
+          WINE_PROFILE_DESCRIPTION_PREFIX: ${{ github.event.inputs.wine_profile_description || 'Wine ARM64EC build' }}
+          WINLATOR_APP_ID: ${{ github.event.inputs.target_app_id || 'app.gamenative' }}
+          WINE_PREFIX_PACK_URL: ${{ github.event.inputs.prefix_pack_url || 'https://github.com/thjjfyu/winebionreg/releases/download/Dddf/prefixPack.tzst' }}
+        run: |
+          bash "$TOOLKIT_DIR/scripts/build-wine-arm64ec.sh" --source-dir "$GITHUB_WORKSPACE/wine-source" --build-dir "$GITHUB_WORKSPACE/wine-build-arm64ec"
+
+      - name: Upload Wine ARM64EC artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wine-arm64ec-artifacts
+          path: |
+            output/*.wcp
+            output/*.tar.xz
+            output/*.sha256
+            wine-build-arm64ec/logs/*.log
+            wine-source/config.log
+            wine-build-arm64ec/host/config.log
+            wine-build-arm64ec/target/config.log
+          if-no-files-found: warn
+
+  release:
+    needs:
+      - prepare
+      - build
+    if: needs.build.result == 'success'
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-24.04' }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wine-arm64ec-artifacts
+          path: artifacts/wine-arm64ec
+
+      - name: Prepare release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \( -name "*.wcp" -o -name "*.tar.xz" -o -name "*.sha256" \) -exec cp {} release/ \;
+          RELEASE_TAG="android-wine-arm64ec-${{ github.run_number }}-$(date -u +%Y%m%d)"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update latest.json
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          latest_path = Path("toolkit/android-wine-proton/latest.json")
+          data = json.loads(latest_path.read_text(encoding="utf-8"))
+          data.setdefault("artifacts", {})
+          release_tag = "${{ steps.meta.outputs.release_tag }}"
+          wine_wcps = list(Path("release").glob("wine-*.wcp"))
+          wine_tars = list(Path("release").glob("wine-*.tar.xz"))
+          if wine_tars:
+              wine_file = wine_tars[0]
+              stem = wine_file.name[:-7]
+              parts = stem.split("-")
+              entry = {
+                  "versionName": stem,
+                  "date": parts[-2],
+                  "gitHash": parts[-1],
+                  "tarFileName": wine_file.name,
+                  "tarSha256": hashlib.sha256(wine_file.read_bytes()).hexdigest(),
+                  "releaseTag": release_tag,
+              }
+              if wine_wcps:
+                  entry["fileName"] = wine_wcps[0].name
+                  entry["sha256"] = hashlib.sha256(wine_wcps[0].read_bytes()).hexdigest()
+              data["artifacts"]["wineArm64ec"] = entry
+          latest_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          NOTES="Automated Android Wine ARM64EC build run ${{ github.run_number }}."
+          EXTRA="${{ github.event.inputs.release_description || '' }}"
+          if [ -n "$EXTRA" ]; then NOTES="$NOTES"$'\n\n'"$EXTRA"; fi
+          gh release create "${{ steps.meta.outputs.release_tag }}" release/* --title "${{ steps.meta.outputs.release_tag }}" --notes "$NOTES" --prerelease \
+            || gh release upload "${{ steps.meta.outputs.release_tag }}" release/* --clobber
+
+      - name: Commit latest.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="${GITHUB_REF_NAME:-main}"
+          git fetch origin "$BRANCH"
+          BRANCH="$BRANCH" python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          path = Path("toolkit/android-wine-proton/latest.json")
+          local_data = json.loads(path.read_text(encoding="utf-8"))
+          branch = os.environ.get("BRANCH", "main")
+
+          try:
+              remote_text = subprocess.check_output(
+                  ["git", "show", f"origin/{branch}:toolkit/android-wine-proton/latest.json"],
+                  text=True,
+              )
+              remote_data = json.loads(remote_text)
+          except subprocess.CalledProcessError:
+              remote_data = {"artifacts": {}}
+
+          merged = remote_data
+          merged.setdefault("artifacts", {})
+          merged["artifacts"].update(local_data.get("artifacts", {}))
+          path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+          PY
+          git add "$TOOLKIT_DIR/latest.json"
+          git diff --staged --quiet && exit 0
+          git commit -m "chore: update wine arm64ec latest.json for run ${{ github.run_number }}"
+          git pull --rebase origin "$BRANCH"
+          git push origin "HEAD:$BRANCH"
