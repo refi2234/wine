@@ -3,80 +3,67 @@
     {
       "id": "android-dns",
       "description": "Android dns",
-      "path": "extra-wine-bundle/android-dns.patch",
-      "url": "https://github.com/TGP-17/wine/commit/bc1eaee10d6d450d4288ab69bd78317d2dd850a5.patch"
+      "path": "extra-wine-bundle/android-dns.patch"
     },
     {
       "id": "android-fsync-workaround",
       "description": "fsync workaround for Android",
-      "path": "extra-wine-bundle/android-fsync-workaround.patch",
-      "url": "https://github.com/TGP-17/wine/commit/ac815bc4ae2f4a7b7eba3b2be2e79ca7c1ec158a.patch"
+      "path": "extra-wine-bundle/android-fsync-workaround.patch"
     },
     {
       "id": "android-esync-workaround",
       "description": "esync workaround for Android",
-      "path": "extra-wine-bundle/android-esync-workaround.patch",
-      "url": "https://github.com/TGP-17/wine/commit/b410a3e016019dc4fe0c423c5a2e7495baedaa60.patch"
+      "path": "extra-wine-bundle/android-esync-workaround.patch"
     },
     {
       "id": "ntdll-force-status-success",
       "description": "ntdll force STATUS_SUCCESS when esync and server objects exist",
-      "path": "extra-wine-bundle/ntdll-force-status-success.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/0ccee81fde397917e1ff07d6c4a8bcd85da8925d.patch"
+      "path": "extra-wine-bundle/ntdll-force-status-success.patch"
     },
     {
       "id": "winex11-disable-extra-extensions",
       "description": "winex11 disable extra extensions by default",
-      "path": "extra-wine-bundle/winex11-disable-extra-extensions.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/82078144c53fc36ad2fc10c338e7886602cb879c.patch"
+      "path": "extra-wine-bundle/winex11-disable-extra-extensions.patch"
     },
     {
       "id": "fonts-update-tahoma-bold",
       "description": "fonts update Tahoma Bold",
-      "path": "extra-wine-bundle/fonts-update-tahoma-bold.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/f7d8fa47213cb03c254b2643b5fff1524e5f2b3e.patch"
+      "path": "extra-wine-bundle/fonts-update-tahoma-bold.patch"
     },
     {
       "id": "win32u-force-cds-fullscreen",
       "description": "win32u force display settings change on CDS_FULLSCREEN",
-      "path": "extra-wine-bundle/win32u-force-cds-fullscreen.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/0ac5265d9861b1be811458593aa11df67823fd6a.patch"
+      "path": "extra-wine-bundle/win32u-force-cds-fullscreen.patch"
     },
     {
       "id": "inetcpl-update-icons",
       "description": "inetcpl update icons",
-      "path": "extra-wine-bundle/inetcpl-update-icons.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/27e859628f055c879c57f33816b57fc43773956c.patch"
+      "path": "extra-wine-bundle/inetcpl-update-icons.patch"
     },
     {
       "id": "comctl32-update-icons",
       "description": "comctl32 update icons",
-      "path": "extra-wine-bundle/comctl32-update-icons.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/d465cd0e1394fa37fea7f31514ac49f43ec3eb56.patch"
+      "path": "extra-wine-bundle/comctl32-update-icons.patch"
     },
     {
       "id": "user32-update-icons",
       "description": "user32 update icons",
-      "path": "extra-wine-bundle/user32-update-icons.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/b9f76cf039df3244a569e46ad496fb40313a7e86.patch"
+      "path": "extra-wine-bundle/user32-update-icons.patch"
     },
     {
       "id": "startmenu-update-icons",
       "description": "update startmenu icons",
-      "path": "extra-wine-bundle/startmenu-update-icons.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/4c92dd10e0938eebfe5bdfd48551f631d57cce20.patch"
+      "path": "extra-wine-bundle/startmenu-update-icons.patch"
     },
     {
       "id": "explorer-startmenu-icons",
       "description": "explorer add icons to start menu",
-      "path": "extra-wine-bundle/explorer-startmenu-icons.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/cb9eff0a289d1b8be9d3d0a3aa3821741817ef68.patch"
+      "path": "extra-wine-bundle/explorer-startmenu-icons.patch"
     },
     {
       "id": "eventfd-synchronization",
       "description": "apply eventfd_synchronization patch",
-      "path": "extra-wine-bundle/eventfd-synchronization.patch",
-      "url": "https://github.com/brunodev85/wine-10.10-custom/commit/7463c7fa273899ece1df20fb39190cb6c51df03e.patch"
+      "path": "extra-wine-bundle/eventfd-synchronization.patch"
     }
   ]
 }

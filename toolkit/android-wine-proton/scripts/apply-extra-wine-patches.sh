@@ -50,11 +50,8 @@ while IFS=$'\t' read -r patch_id description local_path url; do
     if [[ -n "$local_path" && -f "$local_path" ]]; then
         echo "Using bundled extra patch: $description"
         cp "$local_path" "$patch_file"
-    elif [[ -n "$url" ]]; then
-        echo "Downloading extra patch: $description"
-        curl -LfsS "$url" -o "$patch_file"
     else
-        echo "ERROR: no local path or download URL available for extra patch: $patch_id" >&2
+        echo "ERROR: bundled extra patch is missing from the repository: $patch_id" >&2
         git -C "$SOURCE_DIR" reset --hard HEAD >/dev/null 2>&1 || true
         git -C "$SOURCE_DIR" clean -fd >/dev/null 2>&1 || true
         skipped=$((skipped + 1))
