@@ -1,9 +1,119 @@
 {
   "patches": [
     {
-      "id": "arm64ec-eventfd-support",
-      "description": "local ARM64EC support/eventfd synchronization base stack",
-      "path": "extra-wine-bundle/eventfd-synchronization.patch"
+      "id": "arm64ec-0001-allow-arm-on-x86-64",
+      "description": "server: Allow ARM on x86-64",
+      "path": "arm64ec-support-bundle/0001-server-Allow-ARM-on-x86-64.patch"
+    },
+    {
+      "id": "arm64ec-0002-build-initial-arm-context",
+      "description": "ntdll: Build initial ARM context on x86-64",
+      "path": "arm64ec-support-bundle/0002-ntdll-Build-initial-ARM-context-on-x86-64.patch"
+    },
+    {
+      "id": "arm64ec-0003-wowarmhw-library",
+      "description": "wowarmhw: Add new Qemu based library",
+      "path": "arm64ec-support-bundle/0003-wowarmhw-Add-new-Qemu-based-library.patch"
+    },
+    {
+      "id": "arm64ec-0004-copy-loword-x86-segments",
+      "description": "ntdll: Only copy LOWORD of x86 segments",
+      "path": "arm64ec-support-bundle/0004-ntdll-Only-copy-LOWORD-of-x86-segments.patch"
+    },
+    {
+      "id": "arm64ec-0005-box64cpu-library",
+      "description": "box64cpu: Add Box64 based library",
+      "path": "arm64ec-support-bundle/0005-box64cpu-Add-Box64-based-library.patch"
+    },
+    {
+      "id": "arm64ec-0006-default-box64cpu",
+      "description": "wow64: Default to box64cpu for i386 emulation, but allow changing it with HODLL",
+      "path": "arm64ec-support-bundle/0006-wow64-Default-to-box64cpu-for-i386-emulation-but-all.patch"
+    },
+    {
+      "id": "arm64ec-0007-wow64-thread-suspension-helpers",
+      "description": "ntdll: Implement WOW64 thread suspension helpers",
+      "path": "arm64ec-support-bundle/0007-ntdll-Implement-WOW64-thread-suspension-helpers.patch"
+    },
+    {
+      "id": "arm64ec-0008-bt-suspend-routine",
+      "description": "wow64: Support running a BT module provided suspend routine",
+      "path": "arm64ec-support-bundle/0008-wow64-Support-running-a-BT-module-provided-suspend-r.patch"
+    },
+    {
+      "id": "arm64ec-0009-wow64-imagebase",
+      "description": "ntdll: Get the right ImageBase on wow64",
+      "path": "arm64ec-support-bundle/0009-ntdll-Get-the-right-ImageBase-on-wow64.patch"
+    },
+    {
+      "id": "arm64ec-0010-wow64-init-after-locales",
+      "description": "ntdll: Perform initial WoW64 initialization after locales are set-up",
+      "path": "arm64ec-support-bundle/0010-ntdll-Perform-initial-WoW64-initialization-after-loc.patch"
+    },
+    {
+      "id": "arm64ec-0011-locale-hack",
+      "description": "ntdll: Improve the locale hack by applying a hack",
+      "path": "arm64ec-support-bundle/0011-ntdll-Improve-the-locale-hack-by-applying-a-hack.patch"
+    },
+    {
+      "id": "arm64ec-0012-internal-app-hack",
+      "description": "ntdll: Enable the Hack for some internal applications",
+      "path": "arm64ec-support-bundle/0012-ntdll-Enable-the-Hack-for-some-internal-applications.patch"
+    },
+    {
+      "id": "arm64ec-0013-revert-setjmp-longjmp",
+      "description": "Revert wow64: Use setjmp/longjmp from ntdll",
+      "path": "arm64ec-support-bundle/0013-Revert-wow64-Use-setjmp-longjmp-from-ntdll.patch"
+    },
+    {
+      "id": "arm64ec-0014-box64-v0-2-8",
+      "description": "box64: Bump to v0.2.8",
+      "path": "arm64ec-support-bundle/0014-box64-Bump-to-v0.2.8.patch"
+    },
+    {
+      "id": "arm64ec-0015-box64-v0-3-0",
+      "description": "box64: Bump to v0.3.0",
+      "path": "arm64ec-support-bundle/0015-box64-Bump-to-v0.3.0.patch"
+    },
+    {
+      "id": "arm64ec-0016-refuse-non-4k-pages",
+      "description": "ntdll: Refuse to run on page sizes other than 4k",
+      "path": "arm64ec-support-bundle/0016-ntdll-Refuse-to-run-on-page-sizes-other-than-4k.patch"
+    },
+    {
+      "id": "arm64ec-0017-extra-arm64ec-symbols",
+      "description": "HACK: define some extra arm64ec symbols to workaround llvm bugs",
+      "path": "arm64ec-support-bundle/0017-HACK-define-some-extra-arm64ec-symbols-to-workaround.patch"
+    },
+    {
+      "id": "arm64ec-0018-rudimentary-suspend-support",
+      "description": "HACK: ntdll: Rudimentary ARM64EC suspend support",
+      "path": "arm64ec-support-bundle/0018-HACK-ntdll-Rudimentary-ARM64EC-suspend-support.patch"
+    },
+    {
+      "id": "arm64ec-0019-skip-box64-on-arm64ec",
+      "description": "HACK: Don't build box64 library for ARM64EC",
+      "path": "arm64ec-support-bundle/0019-HACK-Don-t-build-box64-library-for-ARM64EC.patch"
+    },
+    {
+      "id": "arm64ec-0020-link-box64cpu",
+      "description": "HACK: Link box64cpu differently",
+      "path": "arm64ec-support-bundle/0020-HACK-Link-box64cpu-differently.patch"
+    },
+    {
+      "id": "arm64ec-0021-default-libarm64ecfex",
+      "description": "ntdll: Default to libarm64ecfex for amd64 emulation",
+      "path": "arm64ec-support-bundle/0021-ntdll-Default-to-libarm64ecfex-for-amd64-emulation.patch"
+    },
+    {
+      "id": "arm64ec-0022-eventfd-sync",
+      "description": "wine: eventfd synchronization patch",
+      "path": "arm64ec-support-bundle/0022-wine-eventfd-synchronization-patch.patch"
+    },
+    {
+      "id": "arm64ec-0023-force-x86-gecko-mono",
+      "description": "HACK: Force x86_64 gecko and mono on arm64",
+      "path": "arm64ec-support-bundle/0023-HACK-Force-x86_64-gecko-and-mono-on-arm64.patch"
     }
   ]
 }

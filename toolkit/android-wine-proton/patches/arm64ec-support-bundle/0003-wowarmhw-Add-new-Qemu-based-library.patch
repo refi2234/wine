@@ -1,0 +1,1692 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Zwing?= <nerv@dawncrow.de>
+Date: Tue, 13 Aug 2024 20:58:32 +0200
+Subject: wowarmhw: Add new Qemu based library
+
+---
+ configure                   |   4 +
+ configure.ac                |   3 +
+ dlls/wowarmhw/Makefile.in   |   9 +
+ dlls/wowarmhw/cpu.c         | 346 +++++++++++++++
+ dlls/wowarmhw/qemu.h        | 843 ++++++++++++++++++++++++++++++++++++
+ dlls/wowarmhw/unixlib.c     | 307 +++++++++++++
+ dlls/wowarmhw/unixlib.h     |  52 +++
+ dlls/wowarmhw/wowarmhw.spec |  15 +
+ 8 files changed, 1579 insertions(+)
+ create mode 100644 dlls/wowarmhw/Makefile.in
+ create mode 100644 dlls/wowarmhw/cpu.c
+ create mode 100644 dlls/wowarmhw/qemu.h
+ create mode 100644 dlls/wowarmhw/unixlib.c
+ create mode 100644 dlls/wowarmhw/unixlib.h
+ create mode 100644 dlls/wowarmhw/wowarmhw.spec
+
+diff --git a/configure b/configure
+index b4a0bb36ab0..dd1f34b9c74 100755
+--- a/configure
++++ b/configure
+@@ -1564,6 +1564,7 @@ enable_wofutil
+ enable_wow64
+ enable_wow64cpu
+ enable_wow64win
++enable_wowarmhw
+ enable_wpc
+ enable_wpcap
+ enable_ws2_32
+@@ -20732,12 +20733,14 @@ then
+     enable_wow64=${enable_wow64:-aarch64,x86_64}
+     enable_wow64win=${enable_wow64win:-aarch64,x86_64}
+     enable_wow64cpu=${enable_wow64cpu:-x86_64}
++    enable_wowarmhw=${enable_wowarmhw:-aarch64,x86_64}
+     enable_xtajit=${enable_xtajit:-aarch64,x86_64}
+     enable_xtajit64=${enable_xtajit64:-arm64ec}
+ else
+     enable_wow64=${enable_wow64:-no}
+     enable_wow64win=${enable_wow64win:-no}
+     enable_wow64cpu=${enable_wow64cpu:-no}
++    enable_wowarmhw=${enable_wowarmhw:-no}
+     enable_xtajit=${enable_xtajit:-no}
+     enable_xtajit64=${enable_xtajit64:-no}
+ fi
+@@ -21707,6 +21710,7 @@ wine_fn_config_makefile dlls/wow32 enable_win16
+ wine_fn_config_makefile dlls/wow64 enable_wow64
+ wine_fn_config_makefile dlls/wow64cpu enable_wow64cpu
+ wine_fn_config_makefile dlls/wow64win enable_wow64win
++wine_fn_config_makefile dlls/wowarmhw enable_wowarmhw
+ wine_fn_config_makefile dlls/wpc enable_wpc
+ wine_fn_config_makefile dlls/wpc/tests enable_tests
+ wine_fn_config_makefile dlls/wpcap enable_wpcap
+diff --git a/configure.ac b/configure.ac
+index 4fe8d8ef5b6..28f9bfdd167 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -2339,12 +2339,14 @@ then
+     enable_wow64=${enable_wow64:-aarch64,x86_64}
+     enable_wow64win=${enable_wow64win:-aarch64,x86_64}
+     enable_wow64cpu=${enable_wow64cpu:-x86_64}
++    enable_wowarmhw=${enable_wowarmhw:-aarch64,x86_64}
+     enable_xtajit=${enable_xtajit:-aarch64,x86_64}
+     enable_xtajit64=${enable_xtajit64:-arm64ec}
+ else
+     enable_wow64=${enable_wow64:-no}
+     enable_wow64win=${enable_wow64win:-no}
+     enable_wow64cpu=${enable_wow64cpu:-no}
++    enable_wowarmhw=${enable_wowarmhw:-no}
+     enable_xtajit=${enable_xtajit:-no}
+     enable_xtajit64=${enable_xtajit64:-no}
+ fi
+@@ -3313,6 +3315,7 @@ WINE_CONFIG_MAKEFILE(dlls/wow32,enable_win16)
+ WINE_CONFIG_MAKEFILE(dlls/wow64)
+ WINE_CONFIG_MAKEFILE(dlls/wow64cpu)
+ WINE_CONFIG_MAKEFILE(dlls/wow64win)
++WINE_CONFIG_MAKEFILE(dlls/wowarmhw)
+ WINE_CONFIG_MAKEFILE(dlls/wpc)
+ WINE_CONFIG_MAKEFILE(dlls/wpc/tests)
+ WINE_CONFIG_MAKEFILE(dlls/wpcap)
+diff --git a/dlls/wowarmhw/Makefile.in b/dlls/wowarmhw/Makefile.in
+new file mode 100644
+index 00000000000..7a8fa3790c2
+--- /dev/null
++++ b/dlls/wowarmhw/Makefile.in
+@@ -0,0 +1,9 @@
++MODULE    = wowarmhw.dll
++UNIXLIB   = wowarmhw.so
++IMPORTS   = wow64 ntdll winecrt0
++
++EXTRADLLFLAGS = -nodefaultlibs -Wl,--image-base,0x7a400000
++
++SOURCES = \
++	cpu.c \
++	unixlib.c
+diff --git a/dlls/wowarmhw/cpu.c b/dlls/wowarmhw/cpu.c
+new file mode 100644
+index 00000000000..5acfa23f0e9
+--- /dev/null
++++ b/dlls/wowarmhw/cpu.c
+@@ -0,0 +1,346 @@
++/*
++ * Copyright 2022-2023 André Zwing
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#include <string.h>
++#include <stdarg.h>
++
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
++#include "windef.h"
++#include "winbase.h"
++#include "winreg.h"
++#include "winnls.h"
++#include "unixlib.h"
++#include "wine/debug.h"
++#include "wine/exception.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(wow);
++
++static unixlib_handle_t emuapi_handle;
++
++static const UINT_PTR page_mask = 0xfff;
++
++#define ROUND_ADDR(addr,mask) ((void *)((UINT_PTR)(addr) & ~(UINT_PTR)(mask)))
++#define ROUND_SIZE(addr,size) (((SIZE_T)(size) + ((UINT_PTR)(addr) & page_mask) + page_mask) & ~page_mask)
++
++#define EMUAPI_CALL( func, params ) __wine_unix_call( emuapi_handle, unix_ ## func, params )
++
++NTSTATUS WINAPI emu_run(ARM_CONTEXT *c)
++{
++    struct emu_run_params params = { c };
++    return EMUAPI_CALL( emu_run, &params );
++}
++
++NTSTATUS WINAPI set_prot( DWORD64 base, DWORD64 length, DWORD64 prot )
++{
++    struct set_prot_params params = { base, length, prot };
++    NTSTATUS ret;
++    ret = EMUAPI_CALL( set_prot, &params );
++    return ret;
++}
++
++NTSTATUS WINAPI invalidate_code_range( DWORD64 base, DWORD64 length )
++{
++    struct invalidate_code_range_params params = { base, length };
++    NTSTATUS ret;
++    ret = EMUAPI_CALL( invalidate_code_range, &params );
++    return ret;
++}
++
++NTSTATUS WINAPI Wow64SystemServiceEx( UINT num, UINT *args );
++
++static const UINT32 bopcode = 0xef000000;
++static const UINT32 unxcode = 0xef000000;
++
++static NTSTATUS (WINAPI *p__wine_unix_call_dispatcher)( unixlib_handle_t, unsigned int, void * );
++
++void WINAPI handle_unix_call(ARM_CONTEXT *c)
++{
++    unixlib_handle_t handle;
++    NTSTATUS ret;
++    UINT32 *p;
++
++    p = (UINT32*)&handle;
++    p[0] = c->R0;
++    p[1] = c->R1;
++    ret = p__wine_unix_call_dispatcher(handle, c->R2, ULongToPtr(c->R3));
++    c->Pc = c->Lr;
++    c->R0 = ret;
++}
++
++void WINAPI handle_syscall(ARM_CONTEXT *c)
++{
++    NTSTATUS ret;
++
++    ret = Wow64SystemServiceEx(c->R12, ULongToPtr(c->Sp));
++
++    if (ULongToPtr((c->Pc - 4) & ~1) == &bopcode)
++    {
++        TRACE("ADAPTING\n");
++        c->R0 = ret;
++        c->Pc = c->Lr;
++        c->Lr = c->R3;
++        c->Sp += 4*4; /* pop r0-r3 */
++    }
++    else
++    {
++        TRACE("NOT ADAPTING !!!\n");
++    }
++}
++
++
++/**********************************************************************
++ *           BTCpuProcessInit  (wowarmhw.@)
++ */
++void WINAPI BTCpuSimulate(void)
++{
++    ARM_CONTEXT *wow_context;
++    NTSTATUS ret;
++
++    RtlWow64GetCurrentCpuArea(NULL, (void **)&wow_context, NULL);
++
++    TRACE( "START %p %08lx\n", wow_context, wow_context->Pc );
++
++    ret = emu_run(wow_context);
++    if (ret)
++    {
++        EXCEPTION_RECORD rec;
++
++        ERR("emu_run returned %08lx\n", ret);
++        rec.ExceptionCode    = ret;
++        rec.ExceptionFlags   = 0;
++        rec.ExceptionRecord  = NULL;
++        rec.ExceptionAddress = ULongToPtr(wow_context->Pc);
++        rec.NumberParameters = 0;
++        RtlRaiseException( &rec );
++    }
++
++    if (ULongToPtr(wow_context->Pc - 4) == &unxcode)
++    {
++        /* unix call */
++        handle_unix_call(wow_context);
++    }
++    else if (ULongToPtr(wow_context->Pc - 4) == &bopcode && ULongToPtr(wow_context->R0) == &bopcode)
++    {
++        /* sys call */
++        handle_syscall(wow_context);
++    }
++    else
++    {
++        DWORD arg[] = {0xffffffff, 1};
++
++        ERR("Client crashed\n");
++
++        /* NtTerminateProcess */
++        Wow64SystemServiceEx(212, (UINT*)&arg);
++        return;
++    }
++}
++
++/**********************************************************************
++ *           BTCpuProcessInit  (wowarmhw.@)
++ */
++NTSTATUS WINAPI BTCpuProcessInit(void)
++{
++    if ((ULONG_PTR)BTCpuProcessInit >> 32)
++    {
++        ERR( "wowarmhw loaded above 4G, disabling\n" );
++        return STATUS_INVALID_ADDRESS;
++    }
++
++    if (!p__wine_unix_call_dispatcher)
++    {
++        void **pp__wine_unix_call_dispatcher;
++        UNICODE_STRING str;
++        HMODULE module;
++
++        RtlInitUnicodeString( &str, L"ntdll.dll" );
++        LdrGetDllHandle( NULL, 0, &str, &module );
++        pp__wine_unix_call_dispatcher = RtlFindExportedRoutineByName( module, "__wine_unix_call_dispatcher" );
++        p__wine_unix_call_dispatcher = *pp__wine_unix_call_dispatcher;
++    }
++
++    return STATUS_SUCCESS;
++}
++
++/**********************************************************************
++ *           BTCpuThreadInit  (wowarmhw.@)
++ */
++NTSTATUS WINAPI BTCpuThreadInit(void)
++{
++    FIXME("NYI\n");
++    return STATUS_SUCCESS;
++}
++
++/**********************************************************************
++ *           BTCpuGetBopCode  (wowarmhw.@)
++ */
++void * WINAPI BTCpuGetBopCode(void)
++{
++    return (UINT32*)&bopcode;
++}
++
++void * WINAPI __wine_get_unix_opcode(void)
++{
++    return (UINT32*)&unxcode;
++}
++
++/**********************************************************************
++ *           BTCpuGetContext  (wowarmhw.@)
++ */
++NTSTATUS WINAPI BTCpuGetContext( HANDLE thread, HANDLE process, void *unknown, ARM_CONTEXT *ctx )
++{
++    return NtQueryInformationThread( thread, ThreadWow64Context, ctx, sizeof(*ctx), NULL );
++}
++
++
++/**********************************************************************
++ *           BTCpuSetContext  (wowarmhw.@)
++ */
++NTSTATUS WINAPI BTCpuSetContext( HANDLE thread, HANDLE process, void *unknown, ARM_CONTEXT *ctx )
++{
++    return NtSetInformationThread( thread, ThreadWow64Context, ctx, sizeof(*ctx) );
++}
++
++
++/**********************************************************************
++ *           BTCpuResetToConsistentState  (wowarmhw.@)
++ */
++NTSTATUS WINAPI BTCpuResetToConsistentState( EXCEPTION_POINTERS *ptrs )
++{
++    FIXME( "NYI\n" );
++    return STATUS_SUCCESS;
++}
++
++
++/**********************************************************************
++ *           BTCpuTurboThunkControl  (wowarmhw.@)
++ */
++NTSTATUS WINAPI BTCpuTurboThunkControl( ULONG enable )
++{
++    FIXME( "NYI\n" );
++    if (enable) return STATUS_NOT_SUPPORTED;
++    /* we don't have turbo thunks yet */
++    return STATUS_SUCCESS;
++}
++
++/**********************************************************************
++ *           invalidate_mapped_section
++ *
++ * Invalidates all code in the entire memory section containing 'addr'
++ */
++static NTSTATUS invalidate_mapped_section( PVOID addr )
++{
++    MEMORY_BASIC_INFORMATION mem_info;
++    NTSTATUS ret = NtQueryVirtualMemory( NtCurrentProcess(), addr, MemoryBasicInformation, &mem_info,
++                                         sizeof(mem_info), NULL );
++
++    if (!NT_SUCCESS(ret))
++        return ret;
++
++    return invalidate_code_range( (DWORD64)mem_info.AllocationBase,
++                                  (DWORD64)(mem_info.BaseAddress + mem_info.RegionSize - mem_info.AllocationBase) );
++}
++
++/**********************************************************************
++ *           BTCpuNotifyUnmapViewOfSection  (wowarmhw.@)
++ */
++void WINAPI BTCpuNotifyUnmapViewOfSection( PVOID addr, ULONG flags )
++{
++    NTSTATUS ret;
++    TRACE( "DBG %p %ld\n", addr, flags );
++    ret = invalidate_mapped_section( addr );
++    if (!NT_SUCCESS(ret))
++        WARN( "Failed to invalidate code memory: 0x%x\n", ret );
++}
++
++/**********************************************************************
++ *           BTCpuNotifyMemoryFree  (wowarmhw.@)
++ */
++void WINAPI BTCpuNotifyMemoryFree( PVOID addr, SIZE_T size, ULONG free_type )
++{
++    NTSTATUS ret;
++
++    TRACE( "DBG %p %lld %ld\n", addr, size, free_type );
++    if (!size)
++        ret = invalidate_mapped_section( addr );
++    else if (free_type & MEM_DECOMMIT)
++        /* Invalidate all pages touched by the region, even if they are just straddled */
++        ret = invalidate_code_range( (DWORD64)ROUND_ADDR( addr, page_mask ), (DWORD64)ROUND_SIZE( addr, size ) );
++
++    if (!NT_SUCCESS(ret))
++        WARN( "Failed to invalidate code memory: 0x%x\n", ret );
++    ret = set_prot( (DWORD64)ROUND_ADDR( addr, page_mask ), (DWORD64)ROUND_SIZE( addr, size ), PAGE_NOACCESS );
++    if (!NT_SUCCESS(ret))
++        WARN( "Failed to set protection: 0x%x\n", ret );
++}
++
++/**********************************************************************
++ *           BTCpuNotifyMemoryProtect  (wowarmhw.@)
++ */
++void WINAPI BTCpuNotifyMemoryProtect( PVOID addr, SIZE_T size, DWORD new_protect )
++{
++    NTSTATUS ret;
++    if (!(new_protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE)))
++        return;
++    TRACE( "DBG %p %lld %ld\n", addr, size, new_protect );
++
++    /* Invalidate all pages touched by the region, even if they are just straddled */
++    ret = invalidate_code_range( (DWORD64)ROUND_ADDR( addr, page_mask ), (DWORD64)ROUND_SIZE( addr, size ) );
++    if (!NT_SUCCESS(ret))
++        WARN( "Failed to invalidate code memory: 0x%x\n", ret );
++    ret = set_prot( (DWORD64)ROUND_ADDR( addr, page_mask ), (DWORD64)ROUND_SIZE( addr, size ), new_protect );
++    if (!NT_SUCCESS(ret))
++        WARN( "Failed to set protection: 0x%x\n", ret );
++}
++
++/**********************************************************************
++ *           BTCpuFlushInstructionCache2  (wowarmhw.@)
++ */
++void WINAPI BTCpuFlushInstructionCache2( LPCVOID addr, SIZE_T size)
++{
++    NTSTATUS ret;
++
++    /* Invalidate all pages touched by the region, even if they are just straddled */
++    ret = invalidate_code_range( (DWORD64)addr, (DWORD64)size );
++    if (!NT_SUCCESS(ret))
++        WARN( "Failed to invalidate code memory: 0x%x\n", ret );
++}
++
++BOOL WINAPI DllMain (HINSTANCE inst, DWORD reason, void *reserved )
++{
++    TRACE("%p,%lx,%p\n", inst, reason, reserved);
++
++    switch (reason)
++    {
++        case DLL_PROCESS_ATTACH:
++            LdrDisableThreadCalloutsForDll(inst);
++            if (NtQueryVirtualMemory( GetCurrentProcess(), inst, MemoryWineUnixFuncs,
++                                      &emuapi_handle, sizeof(emuapi_handle), NULL ))
++                return FALSE;
++            if (EMUAPI_CALL( attach, NULL ))
++                return FALSE;
++            break;
++        case DLL_PROCESS_DETACH:
++            if (reserved) break;
++            EMUAPI_CALL( detach, NULL );
++            break;
++    }
++
++    return TRUE;
++}
+diff --git a/dlls/wowarmhw/qemu.h b/dlls/wowarmhw/qemu.h
+new file mode 100644
+index 00000000000..a49d8117e26
+--- /dev/null
++++ b/dlls/wowarmhw/qemu.h
+@@ -0,0 +1,843 @@
++
++#include <stdbool.h>
++#include <stdint.h>
++#include <stdlib.h>
++/*
++#define __USE_POSIX*/
++#include <setjmp.h>
++#include <pthread.h>
++
++#define CONFIG_USER_ONLY 1
++
++
++typedef uint32_t target_ulong; /* or 64? */
++typedef uint64_t tb_page_addr_t; /* or 32? */
++
++struct Object
++{
++    /*< private >*/
++    void *class;
++    void *free;
++    void *properties;
++    uint32_t ref;
++    void *parent;
++};
++typedef struct Object Object;
++typedef struct QTailQLink {
++    void *tql_next;
++    struct QTailQLink *tql_prev;
++} QTailQLink;
++
++#define QLIST_HEAD(name, type)                                          \
++struct name {                                                           \
++        struct type *lh_first;  /* first element */                     \
++}
++#define QLIST_ENTRY(type)                                               \
++struct {                                                                \
++        struct type *le_next;   /* next element */                      \
++        struct type **le_prev;  /* address of previous next element */  \
++}
++#define QTAILQ_HEAD(name, type)                                         \
++union name {                                                            \
++        struct type *tqh_first;       /* first element */               \
++        QTailQLink tqh_circ;          /* link for circular backwards list */ \
++}
++#define QSIMPLEQ_HEAD(name, type)                                       \
++struct name {                                                           \
++    struct type *sqh_first;    /* first element */                      \
++    struct type **sqh_last;    /* addr of last next element */          \
++}
++
++struct NamedGPIOList {
++    char *name;
++    void *in;
++    int num_in;
++    int num_out;
++    QLIST_ENTRY(NamedGPIOList) node;
++};
++struct NamedClockList {
++    char *name;
++    void *clock;
++    bool output;
++    bool alias;
++    QLIST_ENTRY(NamedClockList) node;
++};
++struct ResettableState {
++    unsigned count;
++    bool hold_phase_pending;
++    bool exit_phase_in_progress;
++};
++struct BusState {
++    Object obj;
++    void *parent;
++    char *name;
++    void *hotplug_handler;
++    int max_index;
++    bool realized;
++    int num_children;
++    QTAILQ_HEAD(, BusChild) children;
++    QLIST_ENTRY(BusState) sibling;
++    struct ResettableState reset;
++};
++struct DeviceState {
++    /*< private >*/
++    Object parent_obj;
++    /*< public >*/
++
++    const char *id;
++    char *canonical_path;
++    bool realized;
++    bool pending_deleted_event;
++    void *opts;
++    int hotplugged;
++    bool allow_unplug_during_migration;
++    void *parent_bus;
++    QLIST_HEAD(, NamedGPIOList) gpios;
++    QLIST_HEAD(, NamedClockList) clocks;
++    QLIST_HEAD(, BusState) child_bus;
++    int num_child_bus;
++    int instance_id_alias;
++    int alias_required_for_version;
++    struct ResettableState reset;
++};
++
++struct QemuMutex {
++    pthread_mutex_t lock;
++#ifdef CONFIG_DEBUG_MUTEX
++    const char *file;
++    int line;
++#endif
++    bool initialized;
++};
++
++#if 0
++#define _SIGSET_NWORDS (1024 / (8 * sizeof (unsigned long int)))
++typedef struct
++{
++  unsigned long int __val[_SIGSET_NWORDS];
++} __sigset_t;
++
++# if __WORDSIZE == 64
++typedef long int __jmp_buf[8];
++# elif defined  __x86_64__
++__extension__ typedef long long int __jmp_buf[8];
++# else
++typedef int __jmp_buf[6];
++# endif
++
++/* Calling environment, plus possibly a saved signal mask.  */
++struct __jmp_buf_tag
++  {
++    /* NOTE: The machine-dependent definitions of `__sigsetjmp'
++       assume that a `jmp_buf' begins with a `__jmp_buf' and that
++       `__mask_was_saved' follows it.  Do not move these members
++       or add others before it.  */
++    __jmp_buf __jmpbuf;		/* Calling environment.  */
++    int __mask_was_saved;	/* Saved the signal mask?  */
++    __sigset_t __saved_mask;	/* Saved signal mask.  */
++  };
++typedef struct __jmp_buf_tag sigjmp_buf[1];
++#endif
++
++typedef struct CPUState {
++    /*< private >*/
++    struct DeviceState parent_obj;
++    /*< public >*/
++
++    int nr_cores;
++    int nr_threads;
++
++    struct QemuThread *thread;
++#ifdef _WIN32
++    HANDLE hThread;
++#endif
++    int thread_id;
++    bool running, has_waiter;
++    struct QemuCond *halt_cond;
++    bool thread_kicked;
++    bool created;
++    bool stop;
++    bool stopped;
++    bool unplug;
++    bool crash_occurred;
++    bool exit_request;
++    bool in_exclusive_context;
++    uint32_t cflags_next_tb;
++    /* updates protected by BQL */
++    uint32_t interrupt_request;
++    int singlestep_enabled;
++    int64_t icount_budget;
++    int64_t icount_extra;
++    uint64_t random_seed;
++    sigjmp_buf jmp_env;
++
++    struct QemuMutex work_mutex;
++    QSIMPLEQ_HEAD(, qemu_work_item) work_list;
++
++    void *cpu_ases;
++    int num_ases;
++    void *as;
++    void *memory;
++
++    void *env_ptr; /* CPUArchState */
++#if 0
++    IcountDecr *icount_decr_ptr;
++
++    /* Accessed in parallel; all accesses must be atomic */
++    struct TranslationBlock *tb_jmp_cache[TB_JMP_CACHE_SIZE];
++
++    struct GDBRegisterState *gdb_regs;
++    int gdb_num_regs;
++    int gdb_num_g_regs;
++    QTAILQ_ENTRY(CPUState) node;
++
++    /* ice debug support */
++    QTAILQ_HEAD(, CPUBreakpoint) breakpoints;
++
++    QTAILQ_HEAD(, CPUWatchpoint) watchpoints;
++    CPUWatchpoint *watchpoint_hit;
++
++    void *opaque;
++
++    /* In order to avoid passing too many arguments to the MMIO helpers,
++     * we store some rarely used information in the CPU context.
++     */
++    uintptr_t mem_io_pc;
++
++    int kvm_fd;
++    struct KVMState *kvm_state;
++    struct kvm_run *kvm_run;
++
++    /* Used for events with 'vcpu' and *without* the 'disabled' properties */
++    DECLARE_BITMAP(trace_dstate_delayed, CPU_TRACE_DSTATE_MAX_EVENTS);
++    DECLARE_BITMAP(trace_dstate, CPU_TRACE_DSTATE_MAX_EVENTS);
++
++    DECLARE_BITMAP(plugin_mask, QEMU_PLUGIN_EV_MAX);
++
++#ifdef CONFIG_PLUGIN
++    GArray *plugin_mem_cbs;
++    /* saved iotlb data from io_writex */
++    SavedIOTLB saved_iotlb;
++#endif
++
++    /* TODO Move common fields from CPUArchState here. */
++    int cpu_index;
++    int cluster_index;
++    uint32_t halted;
++    uint32_t can_do_io;
++    int32_t exception_index;
++
++    /* shared by kvm, hax and hvf */
++    bool vcpu_dirty;
++
++    /* Used to keep track of an outstanding cpu throttle thread for migration
++     * autoconverge
++     */
++    bool throttle_thread_scheduled;
++
++    bool ignore_memory_transaction_failures;
++
++    struct hax_vcpu_state *hax_vcpu;
++
++    int hvf_fd;
++
++    /* track IOMMUs whose translations we've cached in the TCG TLB */
++    GArray *iommu_notifiers;
++#endif
++} CPUState;
++
++
++typedef struct {
++    uint64_t raw_tcr;
++    uint32_t mask;
++    uint32_t base_mask;
++} TCR;
++
++typedef struct CPUARMState {
++    /* Regs for current mode.  */
++    uint32_t regs[16];
++
++    /* 32/64 switch only happens when taking and returning from
++     * exceptions so the overlap semantics are taken care of then
++     * instead of having a complicated union.
++     */
++    /* Regs for A64 mode.  */
++    uint64_t xregs[32];
++    uint64_t pc;
++    /* PSTATE isn't an architectural register for ARMv8. However, it is
++     * convenient for us to assemble the underlying state into a 32 bit format
++     * identical to the architectural format used for the SPSR. (This is also
++     * what the Linux kernel's 'pstate' field in signal handlers and KVM's
++     * 'pstate' register are.) Of the PSTATE bits:
++     *  NZCV are kept in the split out env->CF/VF/NF/ZF, (which have the same
++     *    semantics as for AArch32, as described in the comments on each field)
++     *  nRW (also known as M[4]) is kept, inverted, in env->aarch64
++     *  DAIF (exception masks) are kept in env->daif
++     *  BTYPE is kept in env->btype
++     *  all other bits are stored in their correct places in env->pstate
++     */
++    uint32_t pstate;
++    uint32_t aarch64; /* 1 if CPU is in aarch64 state; inverse of PSTATE.nRW */
++
++    /* Cached TBFLAGS state.  See below for which bits are included.  */
++    uint32_t hflags;
++
++    /* Frequently accessed CPSR bits are stored separately for efficiency.
++       This contains all the other bits.  Use cpsr_{read,write} to access
++       the whole CPSR.  */
++    uint32_t uncached_cpsr;
++    uint32_t spsr;
++
++    /* Banked registers.  */
++    uint64_t banked_spsr[8];
++    uint32_t banked_r13[8];
++    uint32_t banked_r14[8];
++
++    /* These hold r8-r12.  */
++    uint32_t usr_regs[5];
++    uint32_t fiq_regs[5];
++
++    /* cpsr flag cache for faster execution */
++    uint32_t CF; /* 0 or 1 */
++    uint32_t VF; /* V is the bit 31. All other bits are undefined */
++    uint32_t NF; /* N is bit 31. All other bits are undefined.  */
++    uint32_t ZF; /* Z set if zero.  */
++    uint32_t QF; /* 0 or 1 */
++    uint32_t GE; /* cpsr[19:16] */
++    uint32_t thumb; /* cpsr[5]. 0 = arm mode, 1 = thumb mode. */
++    uint32_t condexec_bits; /* IT bits.  cpsr[15:10,26:25].  */
++    uint32_t btype;  /* BTI branch type.  spsr[11:10].  */
++    uint64_t daif; /* exception masks, in the bits they are in PSTATE */
++
++    uint64_t elr_el[4]; /* AArch64 exception link regs  */
++    uint64_t sp_el[4]; /* AArch64 banked stack pointers */
++
++    /* System control coprocessor (cp15) */
++    struct {
++        uint32_t c0_cpuid;
++        union { /* Cache size selection */
++            struct {
++                uint64_t _unused_csselr0;
++                uint64_t csselr_ns;
++                uint64_t _unused_csselr1;
++                uint64_t csselr_s;
++            };
++            uint64_t csselr_el[4];
++        };
++        union { /* System control register. */
++            struct {
++                uint64_t _unused_sctlr;
++                uint64_t sctlr_ns;
++                uint64_t hsctlr;
++                uint64_t sctlr_s;
++            };
++            uint64_t sctlr_el[4];
++        };
++        uint64_t cpacr_el1; /* Architectural feature access control register */
++        uint64_t cptr_el[4];  /* ARMv8 feature trap registers */
++        uint32_t c1_xscaleauxcr; /* XScale auxiliary control register.  */
++        uint64_t sder; /* Secure debug enable register. */
++        uint32_t nsacr; /* Non-secure access control register. */
++        union { /* MMU translation table base 0. */
++            struct {
++                uint64_t _unused_ttbr0_0;
++                uint64_t ttbr0_ns;
++                uint64_t _unused_ttbr0_1;
++                uint64_t ttbr0_s;
++            };
++            uint64_t ttbr0_el[4];
++        };
++        union { /* MMU translation table base 1. */
++            struct {
++                uint64_t _unused_ttbr1_0;
++                uint64_t ttbr1_ns;
++                uint64_t _unused_ttbr1_1;
++                uint64_t ttbr1_s;
++            };
++            uint64_t ttbr1_el[4];
++        };
++        uint64_t vttbr_el2; /* Virtualization Translation Table Base.  */
++        /* MMU translation table base control. */
++        TCR tcr_el[4];
++        TCR vtcr_el2; /* Virtualization Translation Control.  */
++        uint32_t c2_data; /* MPU data cacheable bits.  */
++        uint32_t c2_insn; /* MPU instruction cacheable bits.  */
++        union { /* MMU domain access control register
++                 * MPU write buffer control.
++                 */
++            struct {
++                uint64_t dacr_ns;
++                uint64_t dacr_s;
++            };
++            struct {
++                uint64_t dacr32_el2;
++            };
++        };
++        uint32_t pmsav5_data_ap; /* PMSAv5 MPU data access permissions */
++        uint32_t pmsav5_insn_ap; /* PMSAv5 MPU insn access permissions */
++        uint64_t hcr_el2; /* Hypervisor configuration register */
++        uint64_t scr_el3; /* Secure configuration register.  */
++        union { /* Fault status registers.  */
++            struct {
++                uint64_t ifsr_ns;
++                uint64_t ifsr_s;
++            };
++            struct {
++                uint64_t ifsr32_el2;
++            };
++        };
++        union {
++            struct {
++                uint64_t _unused_dfsr;
++                uint64_t dfsr_ns;
++                uint64_t hsr;
++                uint64_t dfsr_s;
++            };
++            uint64_t esr_el[4];
++        };
++        uint32_t c6_region[8]; /* MPU base/size registers.  */
++        union { /* Fault address registers. */
++            struct {
++                uint64_t _unused_far0;
++#ifdef HOST_WORDS_BIGENDIAN
++                uint32_t ifar_ns;
++                uint32_t dfar_ns;
++                uint32_t ifar_s;
++                uint32_t dfar_s;
++#else
++                uint32_t dfar_ns;
++                uint32_t ifar_ns;
++                uint32_t dfar_s;
++                uint32_t ifar_s;
++#endif
++                uint64_t _unused_far3;
++            };
++            uint64_t far_el[4];
++        };
++        uint64_t hpfar_el2;
++        uint64_t hstr_el2;
++        union { /* Translation result. */
++            struct {
++                uint64_t _unused_par_0;
++                uint64_t par_ns;
++                uint64_t _unused_par_1;
++                uint64_t par_s;
++            };
++            uint64_t par_el[4];
++        };
++
++        uint32_t c9_insn; /* Cache lockdown registers.  */
++        uint32_t c9_data;
++        uint64_t c9_pmcr; /* performance monitor control register */
++        uint64_t c9_pmcnten; /* perf monitor counter enables */
++        uint64_t c9_pmovsr; /* perf monitor overflow status */
++        uint64_t c9_pmuserenr; /* perf monitor user enable */
++        uint64_t c9_pmselr; /* perf monitor counter selection register */
++        uint64_t c9_pminten; /* perf monitor interrupt enables */
++        union { /* Memory attribute redirection */
++            struct {
++#ifdef HOST_WORDS_BIGENDIAN
++                uint64_t _unused_mair_0;
++                uint32_t mair1_ns;
++                uint32_t mair0_ns;
++                uint64_t _unused_mair_1;
++                uint32_t mair1_s;
++                uint32_t mair0_s;
++#else
++                uint64_t _unused_mair_0;
++                uint32_t mair0_ns;
++                uint32_t mair1_ns;
++                uint64_t _unused_mair_1;
++                uint32_t mair0_s;
++                uint32_t mair1_s;
++#endif
++            };
++            uint64_t mair_el[4];
++        };
++        union { /* vector base address register */
++            struct {
++                uint64_t _unused_vbar;
++                uint64_t vbar_ns;
++                uint64_t hvbar;
++                uint64_t vbar_s;
++            };
++            uint64_t vbar_el[4];
++        };
++        uint32_t mvbar; /* (monitor) vector base address register */
++        struct { /* FCSE PID. */
++            uint32_t fcseidr_ns;
++            uint32_t fcseidr_s;
++        };
++        union { /* Context ID. */
++            struct {
++                uint64_t _unused_contextidr_0;
++                uint64_t contextidr_ns;
++                uint64_t _unused_contextidr_1;
++                uint64_t contextidr_s;
++            };
++            uint64_t contextidr_el[4];
++        };
++        union { /* User RW Thread register. */
++            struct {
++                uint64_t tpidrurw_ns;
++                uint64_t tpidrprw_ns;
++                uint64_t htpidr;
++                uint64_t _tpidr_el3;
++            };
++            uint64_t tpidr_el[4];
++        };
++        /* The secure banks of these registers don't map anywhere */
++        uint64_t tpidrurw_s;
++        uint64_t tpidrprw_s;
++        uint64_t tpidruro_s;
++
++        union { /* User RO Thread register. */
++            uint64_t tpidruro_ns;
++            uint64_t tpidrro_el[1];
++        };
++    } cp15;
++#if 0
++        uint64_t c14_cntfrq; /* Counter Frequency register */
++        uint64_t c14_cntkctl; /* Timer Control register */
++        uint32_t cnthctl_el2; /* Counter/Timer Hyp Control register */
++        uint64_t cntvoff_el2; /* Counter Virtual Offset register */
++        ARMGenericTimer c14_timer[NUM_GTIMERS];
++        uint32_t c15_cpar; /* XScale Coprocessor Access Register */
++        uint32_t c15_ticonfig; /* TI925T configuration byte.  */
++        uint32_t c15_i_max; /* Maximum D-cache dirty line index.  */
++        uint32_t c15_i_min; /* Minimum D-cache dirty line index.  */
++        uint32_t c15_threadid; /* TI debugger thread-ID.  */
++        uint32_t c15_config_base_address; /* SCU base address.  */
++        uint32_t c15_diagnostic; /* diagnostic register */
++        uint32_t c15_power_diagnostic;
++        uint32_t c15_power_control; /* power control */
++        uint64_t dbgbvr[16]; /* breakpoint value registers */
++        uint64_t dbgbcr[16]; /* breakpoint control registers */
++        uint64_t dbgwvr[16]; /* watchpoint value registers */
++        uint64_t dbgwcr[16]; /* watchpoint control registers */
++        uint64_t mdscr_el1;
++        uint64_t oslsr_el1; /* OS Lock Status */
++        uint64_t mdcr_el2;
++        uint64_t mdcr_el3;
++        /* Stores the architectural value of the counter *the last time it was
++         * updated* by pmccntr_op_start. Accesses should always be surrounded
++         * by pmccntr_op_start/pmccntr_op_finish to guarantee the latest
++         * architecturally-correct value is being read/set.
++         */
++        uint64_t c15_ccnt;
++        /* Stores the delta between the architectural value and the underlying
++         * cycle count during normal operation. It is used to update c15_ccnt
++         * to be the correct architectural value before accesses. During
++         * accesses, c15_ccnt_delta contains the underlying count being used
++         * for the access, after which it reverts to the delta value in
++         * pmccntr_op_finish.
++         */
++        uint64_t c15_ccnt_delta;
++        uint64_t c14_pmevcntr[31];
++        uint64_t c14_pmevcntr_delta[31];
++        uint64_t c14_pmevtyper[31];
++        uint64_t pmccfiltr_el0; /* Performance Monitor Filter Register */
++        uint64_t vpidr_el2; /* Virtualization Processor ID Register */
++        uint64_t vmpidr_el2; /* Virtualization Multiprocessor ID Register */
++        uint64_t tfsr_el[4]; /* tfsre0_el1 is index 0.  */
++        uint64_t gcr_el1;
++        uint64_t rgsr_el1;
++    } cp15;
++
++    struct {
++        /* M profile has up to 4 stack pointers:
++         * a Main Stack Pointer and a Process Stack Pointer for each
++         * of the Secure and Non-Secure states. (If the CPU doesn't support
++         * the security extension then it has only two SPs.)
++         * In QEMU we always store the currently active SP in regs[13],
++         * and the non-active SP for the current security state in
++         * v7m.other_sp. The stack pointers for the inactive security state
++         * are stored in other_ss_msp and other_ss_psp.
++         * switch_v7m_security_state() is responsible for rearranging them
++         * when we change security state.
++         */
++        uint32_t other_sp;
++        uint32_t other_ss_msp;
++        uint32_t other_ss_psp;
++        uint32_t vecbase[M_REG_NUM_BANKS];
++        uint32_t basepri[M_REG_NUM_BANKS];
++        uint32_t control[M_REG_NUM_BANKS];
++        uint32_t ccr[M_REG_NUM_BANKS]; /* Configuration and Control */
++        uint32_t cfsr[M_REG_NUM_BANKS]; /* Configurable Fault Status */
++        uint32_t hfsr; /* HardFault Status */
++        uint32_t dfsr; /* Debug Fault Status Register */
++        uint32_t sfsr; /* Secure Fault Status Register */
++        uint32_t mmfar[M_REG_NUM_BANKS]; /* MemManage Fault Address */
++        uint32_t bfar; /* BusFault Address */
++        uint32_t sfar; /* Secure Fault Address Register */
++        unsigned mpu_ctrl[M_REG_NUM_BANKS]; /* MPU_CTRL */
++        int exception;
++        uint32_t primask[M_REG_NUM_BANKS];
++        uint32_t faultmask[M_REG_NUM_BANKS];
++        uint32_t aircr; /* only holds r/w state if security extn implemented */
++        uint32_t secure; /* Is CPU in Secure state? (not guest visible) */
++        uint32_t csselr[M_REG_NUM_BANKS];
++        uint32_t scr[M_REG_NUM_BANKS];
++        uint32_t msplim[M_REG_NUM_BANKS];
++        uint32_t psplim[M_REG_NUM_BANKS];
++        uint32_t fpcar[M_REG_NUM_BANKS];
++        uint32_t fpccr[M_REG_NUM_BANKS];
++        uint32_t fpdscr[M_REG_NUM_BANKS];
++        uint32_t cpacr[M_REG_NUM_BANKS];
++        uint32_t nsacr;
++    } v7m;
++
++    /* Information associated with an exception about to be taken:
++     * code which raises an exception must set cs->exception_index and
++     * the relevant parts of this structure; the cpu_do_interrupt function
++     * will then set the guest-visible registers as part of the exception
++     * entry process.
++     */
++    struct {
++        uint32_t syndrome; /* AArch64 format syndrome register */
++        uint32_t fsr; /* AArch32 format fault status register info */
++        uint64_t vaddress; /* virtual addr associated with exception, if any */
++        uint32_t target_el; /* EL the exception should be targeted for */
++        /* If we implement EL2 we will also need to store information
++         * about the intermediate physical address for stage 2 faults.
++         */
++    } exception;
++
++    /* Information associated with an SError */
++    struct {
++        uint8_t pending;
++        uint8_t has_esr;
++        uint64_t esr;
++    } serror;
++
++    uint8_t ext_dabt_raised; /* Tracking/verifying injection of ext DABT */
++
++    /* State of our input IRQ/FIQ/VIRQ/VFIQ lines */
++    uint32_t irq_line_state;
++
++    /* Thumb-2 EE state.  */
++    uint32_t teecr;
++    uint32_t teehbr;
++
++    /* VFP coprocessor state.  */
++    struct {
++        ARMVectorReg zregs[32];
++
++#ifdef TARGET_AARCH64
++        /* Store FFR as pregs[16] to make it easier to treat as any other.  */
++#define FFR_PRED_NUM 16
++        ARMPredicateReg pregs[17];
++        /* Scratch space for aa64 sve predicate temporary.  */
++        ARMPredicateReg preg_tmp;
++#endif
++
++        /* We store these fpcsr fields separately for convenience.  */
++        uint32_t qc[4] QEMU_ALIGNED(16);
++        int vec_len;
++        int vec_stride;
++
++        uint32_t xregs[16];
++
++        /* Scratch space for aa32 neon expansion.  */
++        uint32_t scratch[8];
++
++        /* There are a number of distinct float control structures:
++         *
++         *  fp_status: is the "normal" fp status.
++         *  fp_status_fp16: used for half-precision calculations
++         *  standard_fp_status : the ARM "Standard FPSCR Value"
++         *
++         * Half-precision operations are governed by a separate
++         * flush-to-zero control bit in FPSCR:FZ16. We pass a separate
++         * status structure to control this.
++         *
++         * The "Standard FPSCR", ie default-NaN, flush-to-zero,
++         * round-to-nearest and is used by any operations (generally
++         * Neon) which the architecture defines as controlled by the
++         * standard FPSCR value rather than the FPSCR.
++         *
++         * To avoid having to transfer exception bits around, we simply
++         * say that the FPSCR cumulative exception flags are the logical
++         * OR of the flags in the three fp statuses. This relies on the
++         * only thing which needs to read the exception flags being
++         * an explicit FPSCR read.
++         */
++        float_status fp_status;
++        float_status fp_status_f16;
++        float_status standard_fp_status;
++
++        /* ZCR_EL[1-3] */
++        uint64_t zcr_el[4];
++    } vfp;
++    uint64_t exclusive_addr;
++    uint64_t exclusive_val;
++    uint64_t exclusive_high;
++
++    /* iwMMXt coprocessor state.  */
++    struct {
++        uint64_t regs[16];
++        uint64_t val;
++
++        uint32_t cregs[16];
++    } iwmmxt;
++
++#ifdef TARGET_AARCH64
++    struct {
++        ARMPACKey apia;
++        ARMPACKey apib;
++        ARMPACKey apda;
++        ARMPACKey apdb;
++        ARMPACKey apga;
++    } keys;
++#endif
++
++#if defined(CONFIG_USER_ONLY)
++    /* For usermode syscall translation.  */
++    int eabi;
++#endif
++
++    struct CPUBreakpoint *cpu_breakpoint[16];
++    struct CPUWatchpoint *cpu_watchpoint[16];
++
++    /* Fields up to this point are cleared by a CPU reset */
++    struct {} end_reset_fields;
++
++    /* Fields after this point are preserved across CPU reset. */
++
++    /* Internal CPU feature flags.  */
++    uint64_t features;
++
++    /* PMSAv7 MPU */
++    struct {
++        uint32_t *drbar;
++        uint32_t *drsr;
++        uint32_t *dracr;
++        uint32_t rnr[M_REG_NUM_BANKS];
++    } pmsav7;
++
++    /* PMSAv8 MPU */
++    struct {
++        /* The PMSAv8 implementation also shares some PMSAv7 config
++         * and state:
++         *  pmsav7.rnr (region number register)
++         *  pmsav7_dregion (number of configured regions)
++         */
++        uint32_t *rbar[M_REG_NUM_BANKS];
++        uint32_t *rlar[M_REG_NUM_BANKS];
++        uint32_t mair0[M_REG_NUM_BANKS];
++        uint32_t mair1[M_REG_NUM_BANKS];
++    } pmsav8;
++
++    /* v8M SAU */
++    struct {
++        uint32_t *rbar;
++        uint32_t *rlar;
++        uint32_t rnr;
++        uint32_t ctrl;
++    } sau;
++
++    void *nvic;
++    const struct arm_boot_info *boot_info;
++    /* Store GICv3CPUState to access from this struct */
++    void *gicv3state;
++#endif
++} CPUARMState;
++
++#define TYPE_ARM_CPU "arm-cpu"
++#define ARM_CPU_TYPE_SUFFIX "-" TYPE_ARM_CPU
++#define ARM_CPU_TYPE_NAME(name) (name ARM_CPU_TYPE_SUFFIX)
++
++
++typedef enum {
++    MODULE_INIT_MIGRATION,
++    MODULE_INIT_BLOCK,
++    MODULE_INIT_OPTS,
++    MODULE_INIT_QOM,
++    MODULE_INIT_TRACE,
++    MODULE_INIT_XEN_BACKEND,
++    MODULE_INIT_LIBQOS,
++    MODULE_INIT_FUZZ_TARGET,
++    MODULE_INIT_MAX
++} module_init_type;
++
++#define EXCP_UDEF            1   /* undefined instruction */
++#define EXCP_SWI             2   /* software interrupt */
++#define EXCP_PREFETCH_ABORT  3
++#define EXCP_DATA_ABORT      4
++#define EXCP_IRQ             5
++#define EXCP_FIQ             6
++#define EXCP_BKPT            7
++#define EXCP_EXCEPTION_EXIT  8   /* Return from v7M exception.  */
++#define EXCP_KERNEL_TRAP     9   /* Jumped to kernel code page.  */
++#define EXCP_HVC            11   /* HyperVisor Call */
++#define EXCP_HYP_TRAP       12
++#define EXCP_SMC            13   /* Secure Monitor Call */
++#define EXCP_VIRQ           14
++#define EXCP_VFIQ           15
++#define EXCP_SEMIHOST       16   /* semihosting call */
++#define EXCP_NOCP           17   /* v7M NOCP UsageFault */
++#define EXCP_INVSTATE       18   /* v7M INVSTATE UsageFault */
++#define EXCP_STKOF          19   /* v8M STKOF UsageFault */
++#define EXCP_LAZYFP         20   /* v7M fault during lazy FP stacking */
++#define EXCP_LSERR          21   /* v8M LSERR SecureFault */
++#define EXCP_UNALIGNED      22   /* v7M UNALIGNED UsageFault */
++
++#define EXCP_INTERRUPT 	0x10000 /* async interruption */
++#define EXCP_HLT        0x10001 /* hlt instruction reached */
++#define EXCP_DEBUG      0x10002 /* cpu stopped after a breakpoint or singlestep */
++#define EXCP_HALTED     0x10003 /* cpu is halted (waiting for external event) */
++#define EXCP_YIELD      0x10004 /* cpu wants to yield timeslice to another */
++#define EXCP_ATOMIC     0x10005 /* stop-the-world and emulate atomic */
++
++#define EXCP0E_PAGE	14
++#define EXCP10_COPR	16
++#define EXCP11_ALGN	17
++#define EXCP12_MCHK	18
++#define EXCP_SYSCALL    0x101 /* only for user emulation */
++
++#define PAGE_READ      0x0001
++#define PAGE_WRITE     0x0002
++#define PAGE_EXEC      0x0004
++#define PAGE_BITS      (PAGE_READ | PAGE_WRITE | PAGE_EXEC)
++#define PAGE_VALID     0x0008
++
++struct tb_tc {
++    void *ptr;    /* pointer to the translated code */
++    size_t size;
++};
++
++struct TranslationBlock {
++    target_ulong pc;   /* simulated PC corresponding to this block (EIP + CS base) */
++    target_ulong cs_base; /* CS base for this block */
++    uint32_t flags; /* flags defining in which context the code was generated */
++    uint16_t size;      /* size of target code for this block (1 <=
++                           size <= TARGET_PAGE_SIZE) */
++    uint16_t icount;
++    uint32_t cflags;    /* compile flags */
++#define CF_COUNT_MASK  0x00007fff
++#define CF_LAST_IO     0x00008000 /* Last insn may be an IO access.  */
++#define CF_NOCACHE     0x00010000 /* To be freed after execution */
++#define CF_USE_ICOUNT  0x00020000
++#define CF_INVALID     0x00040000 /* TB is stale. Set with @jmp_lock held */
++#define CF_PARALLEL    0x00080000 /* Generate code for a parallel context */
++#define CF_CLUSTER_MASK 0xff000000 /* Top 8 bits are cluster ID */
++#define CF_CLUSTER_SHIFT 24
++/* cflags' mask for hashing/comparison */
++#define CF_HASH_MASK   \
++    (CF_COUNT_MASK | CF_LAST_IO | CF_USE_ICOUNT | CF_PARALLEL | CF_CLUSTER_MASK)
++
++    /* Per-vCPU dynamic tracing state used to generate this TB */
++    uint32_t trace_vcpu_dstate;
++
++    struct tb_tc tc;
++
++    /* original tb when cflags has CF_NOCACHE */
++    struct TranslationBlock *orig_tb;
++    /* first and second physical page containing code. The lower bit
++       of the pointer tells the index in page_next[].
++       The list is protected by the TB's page('s) lock(s) */
++    uintptr_t page_next[2];
++    tb_page_addr_t page_addr[2];
++// and more...
++};
++typedef struct TranslationBlock TranslationBlock;
+diff --git a/dlls/wowarmhw/unixlib.c b/dlls/wowarmhw/unixlib.c
+new file mode 100644
+index 00000000000..42fe868ec09
+--- /dev/null
++++ b/dlls/wowarmhw/unixlib.c
+@@ -0,0 +1,307 @@
++/*
++ * Copyright 2022-2023 André Zwing
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#if 0
++#pragma makedep unix
++#endif
++
++#include "config.h"
++
++#include <stdarg.h>
++#include <dlfcn.h>
++
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
++#include "unixlib.h"
++#include "wine/debug.h"
++#include "qemu.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(wow);
++
++__thread CPUState *thread_cpu;
++
++#define ExitProcess(x) exit(x)
++
++static void (*pcpu_reset)(CPUState*);
++static void (*pcpu_dump_state)(CPUState *cpu, FILE *f, int flags);
++static void (*pcpu_exec_start)(CPUState *);
++static int (*pcpu_exec)(CPUState *);
++static void (*pcpu_exec_end)(CPUState *);
++static void (*pprocess_queued_cpu_work)(CPUState *);
++static void (*prcu_register_thread)(void);
++static void (*ptcg_register_thread)(void);
++static void (*pmodule_call_init)(module_init_type);
++static void (*pqemu_init_cpu_list)(void);
++static void (*ptcg_exec_init)(unsigned long);
++static void (*ptcg_prologue_init)(void*/*TCGContext*/);
++static void (*ptcg_region_init)(void);
++static CPUState* (*pcpu_create)(const char *typename);
++static int (*pqemu_str_to_log_mask)(const char *);
++static void (*pqemu_log_needs_buffers)(void);
++static void (*pqemu_set_log)(int);
++static void (*perror_init)(const char *);
++static void (*ppage_set_flags)(target_ulong start, target_ulong end, int flags);
++static void (*ptb_invalidate_phys_page_range)(tb_page_addr_t start, tb_page_addr_t end);
++
++static void* *ptcg_ctx;
++
++static void *emuapi_handle;
++
++static void init_thread_cpu(void)
++{
++    if (!thread_cpu)
++        thread_cpu = pcpu_create(ARM_CPU_TYPE_NAME("max"));
++    if (!thread_cpu)
++    {
++        fprintf(stderr, "Unable to find CPU definition\n");
++    }
++    pcpu_reset(thread_cpu);
++}
++
++static NTSTATUS attach( void *args )
++{
++    static char default_lib[] = "libqemu-arm.so";
++    char *holib, *qemu_log;
++    int log_mask;
++
++    MESSAGE("starting Qemu based wowarmhw.dll\n");
++
++    holib = getenv("HOLIB");
++    if (!holib)
++        holib = default_lib;
++    if (!(emuapi_handle = dlopen( holib, RTLD_NOW ))) return STATUS_DLL_NOT_FOUND;
++
++#define LOAD_FUNCPTR(f) if((p##f = dlsym(emuapi_handle, #f)) == NULL) {ERR(#f " %p\n", p##f);return STATUS_ENTRYPOINT_NOT_FOUND;}
++#define LOAD_FUNCPTR_OPT(f) if((p##f = dlsym(emuapi_handle, #f)) == NULL) {ERR(#f " %p\n", p##f);}
++    LOAD_FUNCPTR(cpu_reset);
++    LOAD_FUNCPTR(cpu_dump_state);
++    LOAD_FUNCPTR(cpu_exec_start);
++    LOAD_FUNCPTR(cpu_exec);
++    LOAD_FUNCPTR(cpu_exec_end);
++    LOAD_FUNCPTR(process_queued_cpu_work);
++    LOAD_FUNCPTR(rcu_register_thread);
++    LOAD_FUNCPTR(tcg_register_thread);
++    LOAD_FUNCPTR(module_call_init);
++    LOAD_FUNCPTR(qemu_init_cpu_list);
++    LOAD_FUNCPTR_OPT(tcg_exec_init);
++    LOAD_FUNCPTR(tcg_prologue_init);
++    LOAD_FUNCPTR(tcg_region_init);
++    LOAD_FUNCPTR(cpu_create);
++    LOAD_FUNCPTR(qemu_str_to_log_mask);
++    LOAD_FUNCPTR_OPT(qemu_log_needs_buffers);
++    LOAD_FUNCPTR(qemu_set_log);
++    LOAD_FUNCPTR(error_init);
++    LOAD_FUNCPTR(page_set_flags);
++    LOAD_FUNCPTR(tcg_ctx);
++    LOAD_FUNCPTR(tb_invalidate_phys_page_range);
++#undef LOAD_FUNCPTR_OPT
++#undef LOAD_FUNCPTR
++
++    perror_init("HOqemu");
++    pmodule_call_init(MODULE_INIT_TRACE);
++    pqemu_init_cpu_list();
++    pmodule_call_init(MODULE_INIT_QOM);
++
++    qemu_log = getenv("QEMU_LOG");
++    if (qemu_log && (log_mask = pqemu_str_to_log_mask(qemu_log)))
++    {
++        if (log_mask) {
++            if (pqemu_log_needs_buffers)
++                pqemu_log_needs_buffers();
++            pqemu_set_log(log_mask);
++        }
++    }
++
++    if (ptcg_exec_init)
++        ptcg_exec_init(0);
++    init_thread_cpu();
++
++    ptcg_prologue_init(*ptcg_ctx);
++    ptcg_region_init();
++    ppage_set_flags(4096, 0x80000000, PAGE_VALID | PAGE_EXEC | PAGE_WRITE | PAGE_READ);
++
++    return STATUS_SUCCESS;
++}
++
++static NTSTATUS detach( void *args )
++{
++    dlclose( emuapi_handle );
++    return STATUS_SUCCESS;
++}
++
++static inline void *get_wow_teb( TEB *teb )
++{
++    return teb->WowTebOffset ? (void *)((char *)teb + teb->WowTebOffset) : NULL;
++}
++
++static void ctx_to_qemu(ARM_CONTEXT *c, CPUARMState *env)
++{
++    TEB *teb = NtCurrentTeb();
++    void *wowteb = get_wow_teb(teb);
++    env->regs[0] = c->R0;
++    env->regs[1] = c->R1;
++    env->regs[2] = c->R2;
++    env->regs[3] = c->R3;
++    env->regs[4] = c->R4;
++    env->regs[5] = c->R5;
++    env->regs[6] = c->R6;
++    env->regs[7] = c->R7;
++    env->regs[8] = c->R8;
++    env->regs[9] = c->R9;
++    env->regs[10] = c->R10;
++    env->regs[11] = c->R11;
++    env->regs[12] = c->R12;
++    env->regs[13] = c->Sp;
++    env->regs[14] = c->Lr;
++    env->regs[15] = c->Pc;
++
++    /* TODO: ARM_CONTEXT also has CPSR!!!! */
++    env->uncached_cpsr = 0x10 /*user*/;
++    env->cp15.tpidrurw_ns = (uint64_t)wowteb;
++    if ((uint32_t)c->Pc & 1)
++    {
++        env->thumb = 1;
++        env->uncached_cpsr |= 0x20 /* thumb? */;
++        env->regs[15] = env->regs[15] & ~1;
++    }
++    /* TODO: Much more! */
++}
++
++static void qemu_to_ctx(CPUARMState *env, ARM_CONTEXT *c)
++{
++     c->R0 = env->regs[0];
++     c->R1 = env->regs[1];
++     c->R2 = env->regs[2];
++     c->R3 = env->regs[3];
++     c->R4 = env->regs[4];
++     c->R5 = env->regs[5];
++     c->R6 = env->regs[6];
++     c->R7 = env->regs[7];
++     c->R8 = env->regs[8];
++     c->R9 = env->regs[9];
++     c->R10 = env->regs[10];
++     c->R11 = env->regs[11];
++     c->R12 = env->regs[12];
++     c->Sp = env->regs[13];
++     c->Lr = env->regs[14];
++     c->Pc = env->regs[15];
++     c->Cpsr = env->uncached_cpsr;
++
++    /* TODO: Much more! */
++}
++
++static NTSTATUS emu_run( void *args )
++{
++    const struct emu_run_params *params = args;
++    CPUState *cs;
++    CPUARMState *env;
++    int trapnr;
++
++    if (!params->c->Pc)
++    {
++        ERR("Attempting to execute NULL.\n");
++        ExitProcess(1);
++    }
++
++    if (!thread_cpu)
++    {
++        FIXME("Initializing new CPU for thread %x.\n", GetCurrentThreadId());
++        prcu_register_thread();
++        ptcg_register_thread();
++        init_thread_cpu();
++        ppage_set_flags(4096, 0x80000000, 8|4|2|1);
++    }
++    cs = thread_cpu;
++    env = cs->env_ptr;
++
++    ctx_to_qemu(params->c, env);
++
++    while (TRUE)
++    {
++        pcpu_exec_start(cs);
++        trapnr = pcpu_exec(cs);
++        pcpu_exec_end(cs);
++        pprocess_queued_cpu_work(cs);
++
++        switch (trapnr)
++        {
++            case EXCP_SWI:
++                break;
++
++            case EXCP_INTERRUPT:
++                ERR("Unhandled interrupt %x, exiting.\n", trapnr);
++                pcpu_dump_state(cs, stderr, 0);
++                ExitProcess(255);
++
++            case EXCP_YIELD:
++                ERR("pause trap %x, continue.\n", trapnr);
++                sched_yield();
++                continue;
++
++            default:
++                ERR("Unhandled trap %x, exiting.\n", trapnr);
++                pcpu_dump_state(cs, stderr, 0);
++                ExitProcess(255);
++        }
++
++        qemu_to_ctx(env, params->c);
++        return 0;
++    }
++
++    return 0;
++}
++
++static NTSTATUS set_prot( void *args )
++{
++    const struct set_prot_params *params = args;
++    int flags = PAGE_VALID;
++    DWORD64 end;
++
++    if (params->prot & PAGE_EXECUTE)
++        flags |= PAGE_EXEC;
++    if (params->prot & PAGE_EXECUTE_READ)
++        flags |= PAGE_EXEC | PAGE_READ;
++    if (params->prot & PAGE_EXECUTE_READWRITE)
++        flags |= PAGE_READ | PAGE_WRITE;
++    if (params->prot & PAGE_READONLY)
++        flags = PAGE_READ;
++    if (params->prot & PAGE_NOACCESS)
++        flags = 0;
++
++    end = params->base + params->length;
++    if (end <= params->base) end = params->base + 0x1000;
++
++    ppage_set_flags(params->base, end, flags);
++    return STATUS_SUCCESS;
++}
++
++static NTSTATUS invalidate_code_range( void *args )
++{
++    const struct invalidate_code_range_params *params = args;
++    ptb_invalidate_phys_page_range(params->base, params->base + params->length);
++    return STATUS_SUCCESS;
++}
++
++const unixlib_entry_t __wine_unix_call_funcs[] =
++{
++    attach,
++    detach,
++    emu_run,
++    set_prot,
++    invalidate_code_range
++};
+diff --git a/dlls/wowarmhw/unixlib.h b/dlls/wowarmhw/unixlib.h
+new file mode 100644
+index 00000000000..3bd5c1a7001
+--- /dev/null
++++ b/dlls/wowarmhw/unixlib.h
+@@ -0,0 +1,52 @@
++/*
++ * Copyright 2022 André Zwing
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#include <stdarg.h>
++
++#include "windef.h"
++#include "winbase.h"
++#include "winternl.h"
++#include "wine/unixlib.h"
++
++
++struct emu_run_params
++{
++    ARM_CONTEXT *c;
++};
++
++struct set_prot_params
++{
++    DWORD64 base;
++    DWORD64 length;
++    DWORD64 prot;
++};
++
++struct invalidate_code_range_params
++{
++    DWORD64 base;
++    DWORD64 length;
++};
++
++enum wowarmhw_funcs
++{
++    unix_attach,
++    unix_detach,
++    unix_emu_run,
++    unix_set_prot,
++    unix_invalidate_code_range
++};
+diff --git a/dlls/wowarmhw/wowarmhw.spec b/dlls/wowarmhw/wowarmhw.spec
+new file mode 100644
+index 00000000000..911f43612ba
+--- /dev/null
++++ b/dlls/wowarmhw/wowarmhw.spec
+@@ -0,0 +1,15 @@
++@ stdcall BTCpuGetBopCode()
++@ stdcall BTCpuGetContext(long long ptr ptr)
++@ stdcall BTCpuProcessInit()
++@ stdcall BTCpuThreadInit()
++@ stdcall BTCpuResetToConsistentState(ptr)
++@ stdcall BTCpuSetContext(long long ptr ptr)
++@ stdcall -norelay BTCpuSimulate()
++@ stdcall BTCpuTurboThunkControl(long)
++#@ stub TurboDispatchJumpAddressEnd
++#@ stub TurboDispatchJumpAddressStart
++@ stdcall BTCpuNotifyUnmapViewOfSection(ptr long)
++@ stdcall BTCpuNotifyMemoryFree(ptr long long)
++@ stdcall BTCpuNotifyMemoryProtect(ptr long long)
++@ stdcall BTCpuFlushInstructionCache2(ptr long)
++@ stdcall __wine_get_unix_opcode()

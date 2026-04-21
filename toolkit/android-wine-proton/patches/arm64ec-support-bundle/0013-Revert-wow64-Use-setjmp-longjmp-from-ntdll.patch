@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Zwing?= <nerv@dawncrow.de>
+Date: Sun, 24 Mar 2024 14:28:19 +0100
+Subject: Revert "wow64: Use setjmp/longjmp from ntdll."
+
+This reverts commit 117fefa274fca045c9c1dc19fb2563d9e8261c25.
+---
+ dlls/wow64/syscall.c | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/dlls/wow64/syscall.c b/dlls/wow64/syscall.c
+index 35e936bf188..98ac4258f13 100644
+--- a/dlls/wow64/syscall.c
++++ b/dlls/wow64/syscall.c
+@@ -19,7 +19,6 @@
+  */
+ 
+ #include <stdarg.h>
+-#include <setjmp.h>
+ 
+ #include "ntstatus.h"
+ #define WIN32_NO_STATUS
+@@ -27,7 +26,7 @@
+ #include "winbase.h"
+ #include "winnt.h"
+ #include "winternl.h"
+-#include "rtlsupportapi.h"
++#include "wine/exception.h"
+ #include "wine/unixlib.h"
+ #include "wine/asm.h"
+ #include "wow64_private.h"
+@@ -97,7 +96,7 @@ struct user_callback_frame
+     void                      **ret_ptr;
+     ULONG                      *ret_len;
+     NTSTATUS                    status;
+-    jmp_buf                     jmpbuf;
++    __wine_jmp_buf              jmpbuf;
+ };
+ 
+ /* stack frame for user APCs */
+@@ -138,6 +137,8 @@ void     (WINAPI *pBTCpuUpdateProcessorInformation)( SYSTEM_CPU_INFORMATION * )
+ void     (WINAPI *pBTCpuProcessTerm)( HANDLE, BOOL, NTSTATUS ) = NULL;
+ void     (WINAPI *pBTCpuThreadTerm)( HANDLE, LONG ) = NULL;
+ 
++void *dummy = RtlUnwind;
++
+ BOOL WINAPI DllMain( HINSTANCE inst, DWORD reason, void *reserved )
+ {
+     if (reason == DLL_PROCESS_ATTACH) LdrDisableThreadCalloutsForDll( inst );
+@@ -492,8 +493,7 @@ NTSTATUS WINAPI wow64_NtCallbackReturn( UINT *args )
+     *frame->ret_ptr = ret_ptr;
+     *frame->ret_len = ret_len;
+     frame->status = status;
+-    longjmp( frame->jmpbuf, 1 );
+-    return STATUS_SUCCESS;
++    __wine_longjmp( &frame->jmpbuf, 1 );
+ }
+ 
+ 
+@@ -1294,7 +1294,7 @@ NTSTATUS WINAPI Wow64KiUserCallbackDispatcher( ULONG id, void *args, ULONG len,
+             ctx.Eip = pLdrSystemDllInitBlock->pKiUserCallbackDispatcher;
+             pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
+ 
+-            if (!setjmp( frame.jmpbuf ))
++            if (!__wine_setjmpex( &frame.jmpbuf, NULL ))
+                 cpu_simulate();
+             else
+                 pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &orig_ctx );
+@@ -1319,7 +1319,7 @@ NTSTATUS WINAPI Wow64KiUserCallbackDispatcher( ULONG id, void *args, ULONG len,
+             ctx.Pc = pLdrSystemDllInitBlock->pKiUserCallbackDispatcher;
+             pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
+ 
+-            if (!setjmp( frame.jmpbuf ))
++            if (!__wine_setjmpex( &frame.jmpbuf, NULL ))
+                 cpu_simulate();
+             else
+                 pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &orig_ctx );

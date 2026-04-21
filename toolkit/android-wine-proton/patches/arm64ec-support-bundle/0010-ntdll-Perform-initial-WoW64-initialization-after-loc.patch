@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Tue, 11 Jul 2023 12:05:06 +0100
+Subject: ntdll: Perform initial WoW64 initialization after locales are set-up
+
+This allows the WoW64 BT module to use functions from kernel32, which implicitly
+depends on locales having been setup to initialise correctly.
+---
+ dlls/ntdll/loader.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
+index 22f9e2dec61..60de59543c8 100644
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -4422,8 +4422,6 @@ void loader_init( CONTEXT *context, void **entry )
+         if (!default_load_path)
+             get_dll_load_path( peb->ProcessParameters->ImagePathName.Buffer, NULL, dll_safe_mode, &default_load_path );
+ 
+-        if (NtCurrentTeb()->WowTebOffset) init_wow64( context );
+-
+         wm = build_main_module();
+         build_ntdll_module();
+ #ifdef __arm64ec__
+@@ -4442,8 +4440,12 @@ void loader_init( CONTEXT *context, void **entry )
+ 
+         actctx_init();
+         locale_init();
++
+         if (needs_elevation())
+             elevate_token();
++
++        if (NtCurrentTeb()->WowTebOffset) init_wow64( context );
++
+         get_env_var( L"WINESYSTEMDLLPATH", 0, &system_dll_path );
+         if (wm->ldr.Flags & LDR_COR_ILONLY)
+             status = fixup_imports_ilonly( wm, NULL, entry );

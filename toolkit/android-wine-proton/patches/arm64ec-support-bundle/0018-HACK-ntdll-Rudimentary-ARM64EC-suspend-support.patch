@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Fri, 12 Apr 2024 20:04:31 +0000
+Subject: HACK: ntdll: Rudimentary ARM64EC suspend support.
+
+---
+ dlls/ntdll/unix/signal_arm64.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/dlls/ntdll/unix/signal_arm64.c b/dlls/ntdll/unix/signal_arm64.c
+index 128a50db2bb..3ddc0412f97 100644
+--- a/dlls/ntdll/unix/signal_arm64.c
++++ b/dlls/ntdll/unix/signal_arm64.c
+@@ -229,6 +229,11 @@ void set_process_instrumentation_callback( void *callback )
+     if (callback) FIXME( "Not supported.\n" );
+ }
+ 
++static BOOLEAN is_arm64ec_emulator_stack( void *stack_ptr )
++{
++    return (ULONG64)stack_ptr <= NtCurrentTeb()->ChpeV2CpuAreaInfo->EmulatorStackBase &&
++           (ULONG64)stack_ptr > NtCurrentTeb()->ChpeV2CpuAreaInfo->EmulatorStackLimit;
++}
+ 
+ /***********************************************************************
+  *           unwind_builtin_dll
+@@ -1275,8 +1280,18 @@ static void usr1_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+     else
+     {
+         save_context( &context, sigcontext );
++        DWORD64 spc = context.Sp, pcc = context.Pc;
+         context.ContextFlags |= CONTEXT_EXCEPTION_REPORTING;
++        if (is_arm64ec()) {
++            if (is_arm64ec_emulator_stack((void*)context.Sp) && context.X[28] > 0x10000 && context.X[28] < (1ULL << 39)) {
++                context.Sp = context.X[23];
++                context.Pc = *((DWORD64*)context.X[28]);
++            }
++        }
+         wait_suspend( &context );
++        if (is_arm64ec()) {
++            context.Sp = spc; context.Pc = pcc;
++        }
+         restore_context( &context, sigcontext );
+     }
+ }
