@@ -99,13 +99,13 @@ def ensure_winex11_glx_fix(source_dir: Path) -> str:
     text = path.read_text(encoding="utf-8")
     declaration = "    static int wine_x11forceglx = -1;\n"
 
-    if "WINE_X11FORCEGLX" not in text and "wine_x11forceglx" not in text:
+    if "wine_x11forceglx" not in text and "WINE_X11FORCEGLX" not in text:
         return "winex11: GLX env-var force block not present, nothing to reconcile"
 
     if declaration.strip() in text:
         return "winex11: GLX env-var declaration already present"
 
-    if "if (wine_x11forceglx == -1)" in text or "|| wine_x11forceglx" in text:
+    if "wine_x11forceglx" in text:
         init_prefix = "static void init_opengl(void)\n{\n"
         if init_prefix in text:
             text = text.replace(init_prefix, init_prefix + declaration, 1)
