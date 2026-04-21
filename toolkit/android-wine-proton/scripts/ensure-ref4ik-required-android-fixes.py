@@ -97,12 +97,20 @@ def ensure_locale_fix(source_dir: Path) -> str:
 def ensure_winex11_glx_fix(source_dir: Path) -> str:
     path = source_dir / "dlls" / "winex11.drv" / "opengl.c"
     text = path.read_text(encoding="utf-8")
+    declaration = "    static int wine_x11forceglx = -1;\n"
 
     if "WINE_X11FORCEGLX" not in text and "wine_x11forceglx" not in text:
         return "winex11: GLX env-var force block not present, nothing to reconcile"
 
-    if "static int wine_x11forceglx = -1;" in text:
+    if declaration.strip() in text:
         return "winex11: GLX env-var declaration already present"
+
+    if "if (wine_x11forceglx == -1)" in text or "|| wine_x11forceglx" in text:
+        init_prefix = "static void init_opengl(void)\n{\n"
+        if init_prefix in text:
+            text = text.replace(init_prefix, init_prefix + declaration, 1)
+            path.write_text(text, encoding="utf-8")
+            return "winex11: restored missing GLX env-var declaration immediately after init_opengl() opening brace"
 
     init_opengl = re.search(
         r"static void init_opengl\(void\)\n\{\n(?P<body>.*?)(?=\n(?:static |BOOL |void |\w+\s+\*?\w+\())",
@@ -113,7 +121,6 @@ def ensure_winex11_glx_fix(source_dir: Path) -> str:
         return "winex11: init_opengl() block not found, skipping GLX env-var reconciliation"
 
     body = init_opengl.group("body")
-    declaration = "    static int wine_x11forceglx = -1;\n"
     anchors = (
         "    unsigned int i;\n",
         "    int error_base, event_base;\n",
