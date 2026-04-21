@@ -1,0 +1,9 @@
+{
+  "patches": [
+    {
+      "id": "arm64ec-eventfd-support",
+      "description": "local ARM64EC support/eventfd synchronization base stack",
+      "path": "extra-wine-bundle/eventfd-synchronization.patch"
+    }
+  ]
+}

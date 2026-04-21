@@ -4,6 +4,7 @@ Apply the Android-specific opengl.c changes directly when the original
 GameNative patch drifts against newer Proton/Wine sources.
 """
 import os
+import re
 import sys
 
 
@@ -48,6 +49,38 @@ def main():
         '    if(!X11DRV_WineGL_InitOpenglInfo()) goto failed;\n\n#ifdef __ANDROID__\n    if (getenv("WINE_X11FORCEGLX"))\n        wine_x11forceglx = atoi(getenv("WINE_X11FORCEGLX"));\n\n    if (XQueryExtension( gdi_display, "GLX", &glx_opcode, &event_base, &error_base ) || wine_x11forceglx)\n#else\n    if (XQueryExtension( gdi_display, "GLX", &glx_opcode, &event_base, &error_base ))\n#endif\n',
     )
     total += n
+
+    if "wine_x11forceglx" not in src:
+        pattern = re.compile(
+            r"(UINT\s+X11DRV_OpenGLInit\s*\([^)]*\)\s*\n\{\n(?:[ \t].*\n)*?[ \t]*int\s+error_base,\s*event_base;\n)",
+            re.MULTILINE,
+        )
+        match = pattern.search(src)
+        if match:
+            src = src[: match.end()] + "#ifdef __ANDROID__\n    int wine_x11forceglx = 0;\n#endif\n" + src[match.end() :]
+            print("  [regex android wine_x11forceglx variable] applied")
+            total += 1
+
+    if "|| wine_x11forceglx" not in src:
+        pattern = re.compile(
+            r'([ \t]*if\s*\(\s*XQueryExtension\(\s*gdi_display,\s*"GLX",\s*&glx_opcode,\s*&event_base,\s*&error_base\s*\)\s*\)\s*\n)',
+            re.MULTILINE,
+        )
+        match = pattern.search(src)
+        if match:
+            replacement = (
+                '#ifdef __ANDROID__\n'
+                '    if (getenv("WINE_X11FORCEGLX"))\n'
+                '        wine_x11forceglx = atoi(getenv("WINE_X11FORCEGLX"));\n'
+                '\n'
+                '    if (XQueryExtension( gdi_display, "GLX", &glx_opcode, &event_base, &error_base ) || wine_x11forceglx)\n'
+                '#else\n'
+                '    if (XQueryExtension( gdi_display, "GLX", &glx_opcode, &event_base, &error_base ))\n'
+                '#endif\n'
+            )
+            src = src[: match.start()] + replacement + src[match.end() :]
+            print("  [regex android WINE_X11FORCEGLX handling] applied")
+            total += 1
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)

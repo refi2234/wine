@@ -206,6 +206,12 @@ jobs:
           git -C wine-source fetch --depth=1 origin "$WINE_REF"
           git -C wine-source checkout FETCH_HEAD
 
+      - name: Apply local ARM64EC support patch bundle
+        if: ${{ github.event.inputs.enable_extreme_esync != 'true' }}
+        shell: bash
+        run: |
+          bash "$TOOLKIT_DIR/scripts/apply-arm64ec-support-patches.sh" "$GITHUB_WORKSPACE/wine-source"
+
       - name: Apply experimental extreme esync patch commit
         if: ${{ github.event.inputs.enable_extreme_esync == 'true' }}
         shell: bash
@@ -223,6 +229,11 @@ jobs:
         shell: bash
         run: |
           bash "$TOOLKIT_DIR/scripts/apply-extra-wine-patches.sh" "$GITHUB_WORKSPACE/wine-source"
+
+      - name: Normalize Android winex11 OpenGL fix
+        shell: bash
+        run: |
+          python3 "$TOOLKIT_DIR/scripts/fix_opengl_c.py" "$GITHUB_WORKSPACE/wine-source"
 
       - name: Build plain Wine ARM64EC package
         shell: bash
