@@ -54,10 +54,25 @@ on:
         required: false
         default: "Wine ARM64EC build"
         type: string
+      enable_extra_patches:
+        description: Apply optional extra custom patch bundle for ARM64EC Wine
+        required: false
+        default: false
+        type: boolean
+      enable_pipetto_perf_patches:
+        description: Apply local Pipetto performance patch bundle for ARM64EC Wine
+        required: false
+        default: false
+        type: boolean
+      enable_extreme_esync:
+        description: Apply experimental full Pipetto extreme esync patch commit for ARM64EC Wine
+        required: false
+        default: false
+        type: boolean
       prefix_pack_url:
         description: Prefix pack URL for the generated plain Wine ARM64EC profile
         required: false
-        default: https://github.com/thjjfyu/winebionreg/releases/download/Dddf/prefixPack.tzst
+        default: https://raw.githubusercontent.com/GameNative/bionic-prefix-files/main/prefixPack-arm64ec.tzst
         type: string
       release_description:
         description: Optional extra text for the release notes
@@ -91,6 +106,9 @@ jobs:
         run: |
           set -euo pipefail
           FORCE_BUILD="${{ github.event.inputs.force_build || 'false' }}"
+          EXTRA_PATCHES="${{ github.event.inputs.enable_extra_patches || 'false' }}"
+          PIPETTO_PATCHES="${{ github.event.inputs.enable_pipetto_perf_patches || 'false' }}"
+          EXTREME_ESYNC="${{ github.event.inputs.enable_extreme_esync || 'false' }}"
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -107,7 +125,7 @@ jobs:
           WINE_HASH="$(git -C wine-plan-source rev-parse --short HEAD)"
           PREV_WINE_HASH="$(python3 -c 'import json; from pathlib import Path; data = json.loads(Path("toolkit/android-wine-proton/latest.json").read_text(encoding="utf-8")); print(data.get("artifacts", {}).get("wineArm64ec", {}).get("gitHash", ""))')"
           WINE_SKIP=true
-          if [ "$FORCE_BUILD" = true ] || [ "$WINE_HASH" != "$PREV_WINE_HASH" ]; then
+          if [ "$FORCE_BUILD" = true ] || [ "$EXTRA_PATCHES" = true ] || [ "$PIPETTO_PATCHES" = true ] || [ "$EXTREME_ESYNC" = true ] || [ "$WINE_HASH" != "$PREV_WINE_HASH" ]; then
             WINE_SKIP=false
           fi
           rm -rf wine-plan-source
@@ -188,6 +206,24 @@ jobs:
           git -C wine-source fetch --depth=1 origin "$WINE_REF"
           git -C wine-source checkout FETCH_HEAD
 
+      - name: Apply experimental extreme esync patch commit
+        if: ${{ github.event.inputs.enable_extreme_esync == 'true' }}
+        shell: bash
+        run: |
+          bash "$TOOLKIT_DIR/scripts/apply-extreme-esync-patch.sh" "$GITHUB_WORKSPACE/wine-source"
+
+      - name: Apply optional Pipetto Wine patch bundle
+        if: ${{ github.event.inputs.enable_pipetto_perf_patches == 'true' }}
+        shell: bash
+        run: |
+          bash "$TOOLKIT_DIR/scripts/apply-pipetto-wine-patches.sh" "$GITHUB_WORKSPACE/wine-source"
+
+      - name: Apply optional extra Wine patch bundle
+        if: ${{ github.event.inputs.enable_extra_patches == 'true' }}
+        shell: bash
+        run: |
+          bash "$TOOLKIT_DIR/scripts/apply-extra-wine-patches.sh" "$GITHUB_WORKSPACE/wine-source"
+
       - name: Build plain Wine ARM64EC package
         shell: bash
         env:
@@ -198,7 +234,7 @@ jobs:
           PROFILE_VERSION_CODE: ${{ github.event.inputs.wine_version_code || '1' }}
           WINE_PROFILE_DESCRIPTION_PREFIX: ${{ github.event.inputs.wine_profile_description || 'Wine ARM64EC build' }}
           WINLATOR_APP_ID: ${{ github.event.inputs.target_app_id || 'app.gamenative' }}
-          WINE_PREFIX_PACK_URL: ${{ github.event.inputs.prefix_pack_url || 'https://github.com/thjjfyu/winebionreg/releases/download/Dddf/prefixPack.tzst' }}
+          WINE_PREFIX_PACK_URL: ${{ github.event.inputs.prefix_pack_url || 'https://raw.githubusercontent.com/GameNative/bionic-prefix-files/main/prefixPack-arm64ec.tzst' }}
         run: |
           bash "$TOOLKIT_DIR/scripts/build-wine-arm64ec.sh" --source-dir "$GITHUB_WORKSPACE/wine-source" --build-dir "$GITHUB_WORKSPACE/wine-build-arm64ec"
 

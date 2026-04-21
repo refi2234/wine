@@ -18,7 +18,7 @@ WINE_DISPLAY_VERSION="${WINE_DISPLAY_VERSION:-11.0}"
 PROFILE_ARCH_SUFFIX="${PROFILE_ARCH_SUFFIX:-arm64ec}"
 WINE_PROFILE_DESCRIPTION_PREFIX="${WINE_PROFILE_DESCRIPTION_PREFIX:-Wine ARM64EC build}"
 WINLATOR_APP_ID="${WINLATOR_APP_ID:-app.gamenative}"
-WINE_PREFIX_PACK_URL="${WINE_PREFIX_PACK_URL:-https://github.com/thjjfyu/winebionreg/releases/download/Dddf/prefixPack.tzst}"
+WINE_PREFIX_PACK_URL="${WINE_PREFIX_PACK_URL:-https://raw.githubusercontent.com/GameNative/bionic-prefix-files/main/prefixPack-arm64ec.tzst}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
