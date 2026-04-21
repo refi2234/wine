@@ -106,9 +106,9 @@ def ensure_winex11_glx_fix(source_dir: Path) -> str:
         return "winex11: GLX env-var declaration already present"
 
     if "wine_x11forceglx" in text:
-        init_prefix = "static void init_opengl(void)\n{\n"
-        if init_prefix in text:
-            text = text.replace(init_prefix, init_prefix + declaration, 1)
+        init_header = re.search(r"(static\s+void\s+init_opengl\s*\(\s*void\s*\)\s*\r?\n\{\s*\r?\n)", text)
+        if init_header:
+            text = text[: init_header.end()] + declaration + text[init_header.end() :]
             path.write_text(text, encoding="utf-8")
             return "winex11: restored missing GLX env-var declaration immediately after init_opengl() opening brace"
 
