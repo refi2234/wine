@@ -20,14 +20,14 @@ on:
           - app.gamenative
           - com.winlator.cmod
       wine_repo:
-        description: Upstream repo for ARM64EC-capable plain Wine build
+        description: Upstream repo for plain Wine base; ARM64EC support is layered locally from this repo
         required: false
-        default: https://github.com/Pipetto-crypto/wine.git
+        default: https://github.com/wine-mirror/wine.git
         type: string
       wine_ref:
-        description: ARM64EC Wine ref
+        description: Plain Wine base ref for local ARM64EC patching
         required: false
-        default: arm64ec-esync
+        default: master
         type: string
       wine_version_label:
         description: Internal runtime label used for install/release packaging
@@ -117,8 +117,8 @@ jobs:
               path.write_text(json.dumps({"artifacts": {}}, indent=2) + "\n", encoding="utf-8")
           PY
           rm -rf wine-plan-source
-          WINE_REPO="${{ github.event.inputs.wine_repo || 'https://github.com/Pipetto-crypto/wine.git' }}"
-          WINE_REF="${{ github.event.inputs.wine_ref || 'arm64ec-esync' }}"
+          WINE_REPO="${{ github.event.inputs.wine_repo || 'https://github.com/wine-mirror/wine.git' }}"
+          WINE_REF="${{ github.event.inputs.wine_ref || 'master' }}"
           git clone --depth=1 "$WINE_REPO" wine-plan-source || git clone "$WINE_REPO" wine-plan-source
           git -C wine-plan-source fetch --depth=1 origin "$WINE_REF"
           git -C wine-plan-source checkout FETCH_HEAD
@@ -200,8 +200,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          WINE_REPO="${{ github.event.inputs.wine_repo || 'https://github.com/Pipetto-crypto/wine.git' }}"
-          WINE_REF="${{ github.event.inputs.wine_ref || 'arm64ec-esync' }}"
+          WINE_REPO="${{ github.event.inputs.wine_repo || 'https://github.com/wine-mirror/wine.git' }}"
+          WINE_REF="${{ github.event.inputs.wine_ref || 'master' }}"
           git clone --depth=1 "$WINE_REPO" wine-source || git clone "$WINE_REPO" wine-source
           git -C wine-source fetch --depth=1 origin "$WINE_REF"
           git -C wine-source checkout FETCH_HEAD

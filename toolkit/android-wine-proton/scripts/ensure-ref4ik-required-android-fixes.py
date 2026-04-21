@@ -97,47 +97,67 @@ def ensure_locale_fix(source_dir: Path) -> str:
 def ensure_winex11_glx_fix(source_dir: Path) -> str:
     path = source_dir / "dlls" / "winex11.drv" / "opengl.c"
     text = path.read_text(encoding="utf-8")
-    declaration = "    static int wine_x11forceglx = -1;\n"
-
-    if "wine_x11forceglx" not in text and "WINE_X11FORCEGLX" not in text:
+    if "WINE_X11FORCEGLX" not in text:
         return "winex11: GLX env-var force block not present, nothing to reconcile"
 
-    if declaration.strip() in text:
+    if "wine_x11forceglx" in text:
         return "winex11: GLX env-var declaration already present"
 
-    if "wine_x11forceglx" in text:
-        init_header = re.search(r"(static\s+void\s+init_opengl\s*\(\s*void\s*\)\s*\r?\n\{\s*\r?\n)", text)
-        if init_header:
-            text = text[: init_header.end()] + declaration + text[init_header.end() :]
-            path.write_text(text, encoding="utf-8")
-            return "winex11: restored missing GLX env-var declaration immediately after init_opengl() opening brace"
+    modern_old = (
+        "UINT X11DRV_OpenGLInit( UINT version, const struct opengl_funcs *opengl_funcs, "
+        "const struct opengl_driver_funcs **driver_funcs )\n{\n"
+        "    int error_base, event_base;\n"
+    )
+    modern_new = (
+        "UINT X11DRV_OpenGLInit( UINT version, const struct opengl_funcs *opengl_funcs, "
+        "const struct opengl_driver_funcs **driver_funcs )\n{\n"
+        "    int error_base, event_base;\n"
+        "#ifdef __ANDROID__\n"
+        "    int wine_x11forceglx = 0;\n"
+        "#endif\n"
+    )
+    if modern_old in text:
+        text = text.replace(modern_old, modern_new, 1)
+        path.write_text(text, encoding="utf-8")
+        return "winex11: restored Android GLX env-var declaration for X11DRV_OpenGLInit()"
 
-    init_opengl = re.search(
-        r"static void init_opengl\(void\)\n\{\n(?P<body>.*?)(?=\n(?:static |BOOL |void |\w+\s+\*?\w+\())",
+    legacy_old = (
+        "static void init_opengl(void)\n{\n"
+        "    int error_base, event_base;\n"
+        "    unsigned int i;\n"
+    )
+    legacy_new = (
+        "static void init_opengl(void)\n{\n"
+        "    int error_base, event_base;\n"
+        "    unsigned int i;\n"
+        "    static int wine_x11forceglx = -1;\n"
+    )
+    if legacy_old in text:
+        text = text.replace(legacy_old, legacy_new, 1)
+        path.write_text(text, encoding="utf-8")
+        return "winex11: restored legacy GLX env-var declaration for init_opengl()"
+
+    modern_header = re.search(
+        r"(UINT\s+X11DRV_OpenGLInit\s*\(\s*UINT\s+version,\s*const\s+struct\s+opengl_funcs\s+\*opengl_funcs,\s*"
+        r"const\s+struct\s+opengl_driver_funcs\s+\*\*driver_funcs\s*\)\s*\r?\n\{\r?\n"
+        r"[ \t]*int\s+error_base,\s*event_base;\r?\n)",
         text,
-        re.DOTALL,
     )
-    if not init_opengl:
-        return "winex11: init_opengl() block not found, skipping GLX env-var reconciliation"
+    if modern_header:
+        text = text[: modern_header.end()] + "#ifdef __ANDROID__\n    int wine_x11forceglx = 0;\n#endif\n" + text[modern_header.end() :]
+        path.write_text(text, encoding="utf-8")
+        return "winex11: restored Android GLX env-var declaration after drift in X11DRV_OpenGLInit()"
 
-    body = init_opengl.group("body")
-    anchors = (
-        "    unsigned int i;\n",
-        "    int error_base, event_base;\n",
-        "    int event_base, error_base;\n",
+    legacy_header = re.search(
+        r"(static\s+(?:inline\s+)?(?:void|BOOL|UINT|int)\s+init_opengl\s*\(\s*void\s*\)\s*\r?\n\{\s*\r?\n)",
+        text,
     )
+    if legacy_header:
+        text = text[: legacy_header.end()] + "    static int wine_x11forceglx = -1;\n" + text[legacy_header.end() :]
+        path.write_text(text, encoding="utf-8")
+        return "winex11: restored legacy GLX env-var declaration after drift in init_opengl()"
 
-    for anchor in anchors:
-        if anchor in body:
-            body = body.replace(anchor, anchor + declaration, 1)
-            text = text[: init_opengl.start("body")] + body + text[init_opengl.end("body") :]
-            path.write_text(text, encoding="utf-8")
-            return f"winex11: restored missing GLX env-var declaration after patch drift (anchor: {anchor.strip()})"
-
-    body = declaration + body
-    text = text[: init_opengl.start("body")] + body + text[init_opengl.end("body") :]
-    path.write_text(text, encoding="utf-8")
-    return "winex11: restored missing GLX env-var declaration at init_opengl() top after patch drift"
+    raise RuntimeError(f"winex11: unable to locate a supported OpenGL init block in {path}")
 
 
 def main() -> int:
