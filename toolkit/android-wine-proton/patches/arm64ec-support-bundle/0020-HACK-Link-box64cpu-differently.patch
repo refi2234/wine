@@ -8,7 +8,7 @@ Subject: HACK: Link box64cpu differently
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dlls/box64cpu/Makefile.in b/dlls/box64cpu/Makefile.in
-index 67d277f8db6..8d03e68518c 100644
+index 67d277f8db6..f6767676767 100644
 --- a/dlls/box64cpu/Makefile.in
 +++ b/dlls/box64cpu/Makefile.in
 @@ -2,7 +2,7 @@ MODULE    = box64cpu.dll
@@ -16,7 +16,7 @@ index 67d277f8db6..8d03e68518c 100644
  EXTRAINCL = $(BOX64_PE_CFLAGS) $(ZYDIS_PE_CFLAGS)
  
 -EXTRADLLFLAGS = -nodefaultlibs -Wl,--image-base,0x004c0000
-+EXTRADLLFLAGS = -b aarch64-w64-mingw32 -nodefaultlibs -Wl,--image-base,0x004c0000
++EXTRADLLFLAGS = -b aarch64-windows -nodefaultlibs -Wl,--image-base,0x004c0000
  
  SOURCES = \
  	cpu.c \
