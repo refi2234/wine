@@ -10,6 +10,16 @@
       "releaseTag": "android-wine-24-20260419",
       "fileName": "wine-9.11-x86_64-20240614-63e25f9e.wcp",
       "sha256": "e02f6c856fe7e50da25712371c8e1a9cf791ee4861515b3733022e49521b7611"
+    },
+    "wineArm64ec": {
+      "versionName": "wine-9.20-arm64ec-20260422-e1ad43d7",
+      "date": "20260422",
+      "gitHash": "e1ad43d7",
+      "tarFileName": "wine-9.20-arm64ec-20260422-e1ad43d7.tar.xz",
+      "tarSha256": "fe3d6e44873e3c9f53d64e3240a808bf3e092c28c75d463067251e4b492277e6",
+      "releaseTag": "android-wine-arm64ec-20-20260422",
+      "fileName": "wine-9.20-arm64ec-20260422-e1ad43d7.wcp",
+      "sha256": "090ee9e194e9a48f7a10c6a08601b948a41203e6c17e6ad0e5f3df0ad3580121"
     }
   }
 }
