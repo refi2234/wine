@@ -153,6 +153,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential gcc-multilib git wget curl unzip flex bison gettext \
+            clang lld \
             autoconf automake libtool pkg-config mingw-w64 patch xz-utils zstd \
             python3-zstandard debhelper-compat=13 libz-mingw-w64-dev lzma quilt \
             icoutils sharutils dctrl-tools imagemagick librsvg2-bin fontforge-nox \

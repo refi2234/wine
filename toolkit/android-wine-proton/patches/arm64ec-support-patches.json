@@ -124,6 +124,11 @@
       "id": "arm64ec-0023a-wineandroid-cast-start-device-callback",
       "description": "wineandroid: cast start_device_callback assignment for newer clang",
       "path": "arm64ec-support-bundle/0023a-wineandroid-cast-start-device-callback.patch"
+    },
+    {
+      "id": "arm64ec-0023b-winegcc-skip-static-libgcc-arm64-pe",
+      "description": "winegcc: avoid -static-libgcc for aarch64 PE builds under LLVM",
+      "path": "arm64ec-support-bundle/0023b-winegcc-avoid-static-libgcc-for-aarch64-pe.patch"
     }
   ]
 }
