@@ -20,7 +20,7 @@ index a6b91a4..9c23919 100644
 +        /* LLVM aarch64 PE builds may not provide a MinGW libgcc archive. */
 +        if (!opts->nodefaultlibs && !opts->use_msvcrt &&
 +            !(opts->target.cpu == CPU_ARM64 &&
-+              strarray_exists( link_args, "-fuse-ld=lld" )))
++              strarray_exists( &link_args, "-fuse-ld=lld" )))
              strarray_add( &flags, "-static-libgcc" );
  
          if (opts->debug_file && strendswith(opts->debug_file, ".pdb"))
