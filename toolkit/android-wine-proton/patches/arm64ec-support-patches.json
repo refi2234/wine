@@ -119,6 +119,11 @@
       "id": "arm64ec-0023-force-x86-gecko-mono",
       "description": "HACK: Force x86_64 gecko and mono on arm64",
       "path": "arm64ec-support-bundle/0023-HACK-Force-x86_64-gecko-and-mono-on-arm64.patch"
+    },
+    {
+      "id": "arm64ec-0023a-wineandroid-cast-start-device-callback",
+      "description": "wineandroid: cast start_device_callback assignment for newer clang",
+      "path": "arm64ec-support-bundle/0023a-wineandroid-cast-start-device-callback.patch"
     }
   ]
 }
