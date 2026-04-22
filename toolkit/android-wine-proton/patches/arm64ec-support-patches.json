@@ -129,6 +129,11 @@
       "id": "arm64ec-0023b-winegcc-skip-static-libgcc-arm64-pe",
       "description": "winegcc: avoid -static-libgcc for aarch64 PE builds under LLVM",
       "path": "arm64ec-support-bundle/0023b-winegcc-avoid-static-libgcc-for-aarch64-pe.patch"
+    },
+    {
+      "id": "arm64ec-0023c-box64cpu-runtime-builtins",
+      "description": "box64cpu: provide missing compiler-rt builtins for Android PE linking",
+      "path": "arm64ec-support-bundle/0023c-box64cpu-add-runtime-builtins.patch"
     }
   ]
 }
