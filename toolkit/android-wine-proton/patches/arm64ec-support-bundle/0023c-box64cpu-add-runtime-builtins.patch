@@ -71,4 +71,3 @@ diff --git a/dlls/box64cpu/crt.c b/dlls/box64cpu/crt.c
 +{
 +    NtFlushInstructionCache( GetCurrentProcess(), begin, end - begin );
 +}
-
