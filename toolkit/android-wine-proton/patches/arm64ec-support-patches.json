@@ -134,6 +134,11 @@
       "id": "arm64ec-0023c-box64cpu-runtime-builtins",
       "description": "box64cpu: provide missing compiler-rt builtins for Android PE linking",
       "path": "arm64ec-support-bundle/0023c-box64cpu-add-runtime-builtins.patch"
+    },
+    {
+      "id": "arm64ec-0023d-box64-use-clear-cache-builtin",
+      "description": "box64: use __builtin___clear_cache for Android PE linking",
+      "path": "arm64ec-support-bundle/0023d-box64-use-builtin-clear-cache.patch"
     }
   ]
 }

@@ -1,0 +1,21 @@
+diff --git a/libs/box64/src/dynarec/dynarec_native.c b/libs/box64/src/dynarec/dynarec_native.c
+--- a/libs/box64/src/dynarec/dynarec_native.c
++++ b/libs/box64/src/dynarec/dynarec_native.c
+@@ -537,7 +537,7 @@ void* CreateEmptyBlock(dynablock_t* block, uintptr_t addr) {
+     *(void**)(p+2*sizeof(void*)) = native_epilog;
+     CreateJmpNext(block->jmpnext, p+2*sizeof(void*));
+     // all done...
+-    __clear_cache(actual_p, actual_p+sz);   // need to clear the cache before execution...
++    __builtin___clear_cache(actual_p, actual_p+sz);   // need to clear the cache before execution...
+     return block;
+ }
+ 
+@@ -765,7 +765,7 @@ void* FillBlock64(dynablock_t* block, uintptr_t addr, int alternate, int is32bit
+     //block->x64_addr = (void*)start;
+     block->x64_size = end-start;
+     // all done...
+-    __clear_cache(actual_p, actual_p+sz);   // need to clear the cache before execution...
++    __builtin___clear_cache(actual_p, actual_p+sz);   // need to clear the cache before execution...
+     block->hash = X31_hash_code(block->x64_addr, block->x64_size);
+     // Check if something changed, to abort if it is
+     if((block->hash != hash)) {
