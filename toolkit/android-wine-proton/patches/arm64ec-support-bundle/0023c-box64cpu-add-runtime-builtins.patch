@@ -1,12 +1,10 @@
 diff --git a/dlls/box64cpu/crt.c b/dlls/box64cpu/crt.c
 --- a/dlls/box64cpu/crt.c
 +++ b/dlls/box64cpu/crt.c
-@@ -238,4 +238,58 @@ int CDECL fesetround(int round_mode)
-         return 1;
+@@ -239,3 +239,67 @@ int CDECL fesetround(int round_mode)
      _controlfp(round_mode, _MCW_RC);
      return 0;
  }
-+
 +static unsigned __int128 udivmodti4( unsigned __int128 num, unsigned __int128 den,
 +                                     unsigned __int128 *rem )
 +{
