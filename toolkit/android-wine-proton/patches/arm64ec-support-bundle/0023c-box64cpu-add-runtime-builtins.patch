@@ -1,7 +1,7 @@
 diff --git a/dlls/box64cpu/crt.c b/dlls/box64cpu/crt.c
 --- a/dlls/box64cpu/crt.c
 +++ b/dlls/box64cpu/crt.c
-@@ -239,3 +239,62 @@ int CDECL fesetround(int round_mode)
+@@ -239,3 +239,67 @@ int CDECL fesetround(int round_mode)
      _controlfp(round_mode, _MCW_RC);
      return 0;
  }
@@ -63,4 +63,9 @@ diff --git a/dlls/box64cpu/crt.c b/dlls/box64cpu/crt.c
 +
 +    quot = udivmodti4( unum, uden, NULL );
 +    return neg ? -(__int128)quot : (__int128)quot;
++}
++
++void __clear_cache( void *begin, void *end )
++{
++    __builtin___clear_cache( begin, end );
 +}
