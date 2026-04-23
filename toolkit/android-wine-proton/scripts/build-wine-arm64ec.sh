@@ -197,7 +197,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     TARGETCC=\"$CC\" \
     TARGETCXX=\"$CXX\" \
     CFLAGS=\"-O2 -DANDROID -fPIC -I$DEPS_PREFIX/include\" \
-    LDFLAGS=\"-L$DEPS_PREFIX/lib -Wl,-rpath=$DEPS_PREFIX/lib -Wl,--build-id=sha1\""
+    LDFLAGS=\"-Wl,--build-id=sha1\""
 
 run_step build-target-nls make -C "$BUILD_DIR/target" -j"$JOBS" nls/all
 run_step build-and-install-target make -C "$BUILD_DIR/target" -j"$JOBS" install DESTDIR="$BUILD_DIR/install"
