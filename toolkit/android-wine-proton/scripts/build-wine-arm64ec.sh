@@ -161,6 +161,8 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     --libdir=\"$PREFIX/lib\" \
     --enable-archs=aarch64,i386 \
     --with-x \
+    --x-includes=\"$DEPS_PREFIX/include\" \
+    --x-libraries=\"$DEPS_PREFIX/lib\" \
     --without-xfixes \
     --without-xcomposite \
     --without-xcursor \
