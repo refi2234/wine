@@ -8,7 +8,6 @@ BUILD_START_TIME="$(date -u +%s)"
 NDK_PATH="${ANDROID_NDK_HOME:-}"
 SOURCE_DIR="${WINE_SOURCE_DIR:-$(dirname "$SCRIPT_DIR")/wine-source}"
 BUILD_DIR="${BUILD_DIR:-$(dirname "$SCRIPT_DIR")/wine-build-arm64ec}"
-DEPS_PREFIX="${TERMUX_DEPS_PREFIX:-/data/data/com.termux/files/usr}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
 CLEAN_BUILD=0
 ANDROID_API=28
@@ -19,6 +18,7 @@ WINE_DISPLAY_VERSION="${WINE_DISPLAY_VERSION:-11.0}"
 PROFILE_ARCH_SUFFIX="${PROFILE_ARCH_SUFFIX:-arm64ec}"
 WINE_PROFILE_DESCRIPTION_PREFIX="${WINE_PROFILE_DESCRIPTION_PREFIX:-Wine ARM64EC build}"
 WINLATOR_APP_ID="${WINLATOR_APP_ID:-app.gamenative}"
+DEPS_PREFIX="${TERMUX_DEPS_PREFIX:-/data/data/${WINLATOR_APP_ID}/files/imagefs/usr}"
 WINE_PREFIX_PACK_URL="${WINE_PREFIX_PACK_URL:-https://github.com/nnnnnnnnnn3773/wineu11/releases/download/2236636/prefixPack.txz}"
 
 while [[ $# -gt 0 ]]; do
@@ -132,6 +132,11 @@ run_step build-host-tools make -C "$BUILD_DIR/host" -j"$JOBS" __tooldeps__
 
 PREFIX="/data/data/${WINLATOR_APP_ID}/files/imagefs/opt/${PROFILE_VERSION}"
 run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
+    PKG_CONFIG_LIBDIR=\"$DEPS_PREFIX/lib/pkgconfig:$DEPS_PREFIX/share/pkgconfig\" \
+    ACLOCAL_PATH=\"$DEPS_PREFIX/lib/aclocal:$DEPS_PREFIX/share/aclocal\" \
+    CPPFLAGS=\"-I$DEPS_PREFIX/include\" \
+    X_CFLAGS=\"-I$DEPS_PREFIX/include\" \
+    X_LIBS=\"-L$DEPS_PREFIX/lib -landroid-sysvshm\" \
     \"$SOURCE_DIR/configure\" \
     --host=aarch64-linux-android \
     --with-wine-tools=\"$BUILD_DIR/host\" \
@@ -139,8 +144,19 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     --bindir=\"$PREFIX/bin\" \
     --libdir=\"$PREFIX/lib\" \
     --enable-archs=aarch64,i386 \
-    --without-x \
-    --enable-wineandroid_drv \
+    --with-x \
+    --without-xfixes \
+    --without-xcomposite \
+    --without-xcursor \
+    --without-xinerama \
+    --without-xinput \
+    --without-xinput2 \
+    --without-xrandr \
+    --without-xrender \
+    --without-xshape \
+    --with-xshm \
+    --without-xxf86vm \
+    --enable-wineandroid_drv=no \
     --without-freetype \
     --without-gnutls \
     --without-unwind \
@@ -166,8 +182,8 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     STRIP=\"$STRIP\" \
     TARGETCC=\"$CC\" \
     TARGETCXX=\"$CXX\" \
-    CFLAGS=\"-O2 -DANDROID -fPIC\" \
-    LDFLAGS=\"-Wl,--build-id=sha1\""
+    CFLAGS=\"-O2 -DANDROID -fPIC -I$DEPS_PREFIX/include\" \
+    LDFLAGS=\"-L$DEPS_PREFIX/lib -Wl,-rpath=$DEPS_PREFIX/lib -Wl,--build-id=sha1\""
 
 run_step build-target-nls make -C "$BUILD_DIR/target" -j"$JOBS" nls/all
 run_step build-and-install-target make -C "$BUILD_DIR/target" -j"$JOBS" install DESTDIR="$BUILD_DIR/install"
@@ -177,8 +193,8 @@ INNER="$BUILD_DIR/install/data/data/${WINLATOR_APP_ID}/files/imagefs/opt/${PROFI
 cp -r "$INNER/." "$BUILD_DIR/install/"
 rm -rf "$BUILD_DIR/install/data"
 
-if ! find "$BUILD_DIR/install/lib/wine" -type f -name 'wineandroid.drv*' | grep -q .; then
-    die "wineandroid.drv missing from staged Wine runtime; Android Wine needs a graphics driver"
+if ! find "$BUILD_DIR/install/lib/wine" -type f -name 'winex11.drv*' | grep -q .; then
+    die "winex11.drv missing from staged Wine runtime; Winlator needs the X11 graphics driver"
 fi
 
 if ! find "$BUILD_DIR/install/lib/wine" -type f -path '*/aarch64-windows/ntdll.dll' | grep -q .; then
