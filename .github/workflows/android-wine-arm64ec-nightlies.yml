@@ -180,10 +180,10 @@ jobs:
       - name: Prepare imagefs
         shell: bash
         run: |
-          mkdir -p "$HOME/imagefs" "$TOOLKIT_DIR/scripts/reference/extracted"
-          wget -q https://github.com/TGP-17/termux-on-gha/releases/download/test/termuxfs.tar -O "$HOME/imagefs/termuxfs.tar"
-          tar -xf "$HOME/imagefs/termuxfs.tar" -C "$HOME/imagefs"
-          sudo mv "$HOME/imagefs/data" / || true
+          mkdir -p "$HOME/termuxfs" "$TOOLKIT_DIR/scripts/reference/extracted"
+          wget -q "https://github.com/GameNative/termux-on-gha/releases/download/build-20260218/termuxfs-aarch64.tar" -O "$HOME/termuxfs/termuxfs-aarch64.tar"
+          tar -xf "$HOME/termuxfs/termuxfs-aarch64.tar" -C "$HOME/termuxfs"
+          sudo mv "$HOME/termuxfs/data" / || true
           sudo chown -R "$(id -u):$(id -g)" /data
 
       - name: Set up Android SDK

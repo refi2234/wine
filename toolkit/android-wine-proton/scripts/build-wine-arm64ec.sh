@@ -72,8 +72,10 @@ fi
 
 if [[ ! -d "$DEPS_PREFIX" && -z "${TERMUX_DEPS_PREFIX:-}" ]]; then
     for candidate in \
-        "/data/data/com.termux/files/usr" \
         "/data/data/app.gamenative/files/imagefs/usr" \
+        "/data/data/com.winlator.cmod/files/imagefs/usr" \
+        "/data/data/com.winlator.ref4ik/files/imagefs/usr" \
+        "/data/data/com.termux/files/usr" \
         "/data/data/com.winlator.cmod/files/usr"; do
         if [[ -d "$candidate" ]]; then
             log "Termux dependency prefix not found at $DEPS_PREFIX, using $candidate"
