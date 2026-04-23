@@ -132,11 +132,6 @@ run_step build-host-tools make -C "$BUILD_DIR/host" -j"$JOBS" __tooldeps__
 
 PREFIX="/data/data/${WINLATOR_APP_ID}/files/imagefs/opt/${PROFILE_VERSION}"
 run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
-    PKG_CONFIG_LIBDIR=\"$DEPS_PREFIX/lib/pkgconfig:$DEPS_PREFIX/share/pkgconfig\" \
-    ACLOCAL_PATH=\"$DEPS_PREFIX/lib/aclocal:$DEPS_PREFIX/share/aclocal\" \
-    CPPFLAGS=\"-I$DEPS_PREFIX/include\" \
-    X_CFLAGS=\"-I$DEPS_PREFIX/include\" \
-    X_LIBS=\"-L$DEPS_PREFIX/lib\" \
     \"$SOURCE_DIR/configure\" \
     --host=aarch64-linux-android \
     --with-wine-tools=\"$BUILD_DIR/host\" \
@@ -144,19 +139,8 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     --bindir=\"$PREFIX/bin\" \
     --libdir=\"$PREFIX/lib\" \
     --enable-archs=aarch64,i386 \
-    --with-x \
-    --with-xcursor \
-    --without-xfixes \
-    --without-xcomposite \
-    --without-xinerama \
-    --without-xinput \
-    --without-xinput2 \
-    --without-xrandr \
-    --without-xrender \
-    --without-xshape \
-    --without-xshm \
-    --without-xxf86vm \
-    --enable-wineandroid_drv=no \
+    --without-x \
+    --enable-wineandroid_drv \
     --without-freetype \
     --without-gnutls \
     --without-unwind \
@@ -182,7 +166,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     STRIP=\"$STRIP\" \
     TARGETCC=\"$CC\" \
     TARGETCXX=\"$CXX\" \
-    CFLAGS=\"-O2 -DANDROID -fPIC -I$DEPS_PREFIX/include\" \
+    CFLAGS=\"-O2 -DANDROID -fPIC\" \
     LDFLAGS=\"-Wl,--build-id=sha1\""
 
 run_step build-target-nls make -C "$BUILD_DIR/target" -j"$JOBS" nls/all
@@ -193,8 +177,8 @@ INNER="$BUILD_DIR/install/data/data/${WINLATOR_APP_ID}/files/imagefs/opt/${PROFI
 cp -r "$INNER/." "$BUILD_DIR/install/"
 rm -rf "$BUILD_DIR/install/data"
 
-if ! find "$BUILD_DIR/install/lib/wine" -type f -name 'winex11.drv*' | grep -q .; then
-    die "winex11.drv missing from staged Wine runtime; Winlator needs the X11 graphics driver"
+if ! find "$BUILD_DIR/install/lib/wine" -type f -name 'wineandroid.drv*' | grep -q .; then
+    die "wineandroid.drv missing from staged Wine runtime; Android Wine needs a graphics driver"
 fi
 
 if ! find "$BUILD_DIR/install/lib/wine" -type f -path '*/aarch64-windows/ntdll.dll' | grep -q .; then
