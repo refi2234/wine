@@ -26,6 +26,11 @@
       "path": "extra-wine-bundle/winex11-disable-extra-extensions.patch"
     },
     {
+      "id": "winex11-define-libx11-soname",
+      "description": "winex11 define libX11 soname for Android",
+      "path": "extra-wine-bundle/winex11-define-libx11-soname.patch"
+    },
+    {
       "id": "fonts-update-tahoma-bold",
       "description": "fonts update Tahoma Bold",
       "path": "extra-wine-bundle/fonts-update-tahoma-bold.patch"

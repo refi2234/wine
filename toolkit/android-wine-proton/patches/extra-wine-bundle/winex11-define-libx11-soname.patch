@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: OpenAI <noreply@openai.com>
+Date: Thu, 23 Apr 2026 16:55:00 +0300
+Subject: [PATCH] winex11: define libX11 soname for Android builds.
+
+Android/Termux X11 packages may not expose a SONAME through Wine's
+configure probes even though libX11 is available.  Keep winex11.drv
+buildable by using the runtime library name directly.
+---
+ dlls/winex11.drv/x11drv_main.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/dlls/winex11.drv/x11drv_main.c b/dlls/winex11.drv/x11drv_main.c
+index 2b1757bb..55d1c3b2 100644
+--- a/dlls/winex11.drv/x11drv_main.c
++++ b/dlls/winex11.drv/x11drv_main.c
+@@ -36,6 +36,10 @@
+ #include <assert.h>
+ #include <dlfcn.h>
+ #include <X11/cursorfont.h>
+ #include <X11/Xlib.h>
+ #include <X11/XKBlib.h>
++#ifndef SONAME_LIBX11
++#define SONAME_LIBX11 "libX11.so"
++#endif
++
+ #ifdef HAVE_X11_EXTENSIONS_XRENDER_H
+ #include <X11/extensions/Xrender.h>
+ #endif
+-- 
+2.45.0

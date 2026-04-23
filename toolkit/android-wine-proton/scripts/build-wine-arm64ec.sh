@@ -147,7 +147,6 @@ run_step configure-host-tools bash -lc "cd \"$BUILD_DIR/host\" && env -u CC -u C
 run_step build-host-tools make -C "$BUILD_DIR/host" -j"$JOBS" __tooldeps__
 
 PREFIX="/data/data/${WINLATOR_APP_ID}/files/imagefs/opt/${PROFILE_VERSION}"
-TARGET_CFLAGS="-O2 -DANDROID -fPIC -I$DEPS_PREFIX/include -DSONAME_LIBX11=\\\"libX11.so\\\""
 run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     PKG_CONFIG_LIBDIR=\"$DEPS_PREFIX/lib/pkgconfig:$DEPS_PREFIX/share/pkgconfig\" \
     ACLOCAL_PATH=\"$DEPS_PREFIX/lib/aclocal:$DEPS_PREFIX/share/aclocal\" \
@@ -201,7 +200,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     STRIP=\"$STRIP\" \
     TARGETCC=\"$CC\" \
     TARGETCXX=\"$CXX\" \
-    CFLAGS=\"$TARGET_CFLAGS\" \
+    CFLAGS=\"-O2 -DANDROID -fPIC -I$DEPS_PREFIX/include\" \
     LDFLAGS=\"-Wl,--build-id=sha1\""
 
 run_step build-target-nls make -C "$BUILD_DIR/target" -j"$JOBS" nls/all
