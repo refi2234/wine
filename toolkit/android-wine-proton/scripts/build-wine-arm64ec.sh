@@ -81,12 +81,6 @@ STRIP="${TOOLCHAIN}/llvm-strip"
 
 [[ -f "$CC" ]] || die "Compiler not found: $CC"
 
-export PKG_CONFIG_LIBDIR="$DEPS_PREFIX/lib/pkgconfig:$DEPS_PREFIX/share/pkgconfig"
-export ACLOCAL_PATH="$DEPS_PREFIX/lib/aclocal:$DEPS_PREFIX/share/aclocal"
-export CPPFLAGS="-I$DEPS_PREFIX/include"
-export X_CFLAGS="-I$DEPS_PREFIX/include"
-export X_LIBS="-L$DEPS_PREFIX/lib"
-
 if [[ ! -f "$SOURCE_DIR/configure" && -f "$SOURCE_DIR/autogen.sh" ]]; then
     run_step autogen-source bash -lc "cd \"$SOURCE_DIR\" && bash autogen.sh"
 fi
@@ -137,7 +131,13 @@ run_step configure-host-tools bash -lc "cd \"$BUILD_DIR/host\" && env -u CC -u C
 run_step build-host-tools make -C "$BUILD_DIR/host" -j"$JOBS" __tooldeps__
 
 PREFIX="/data/data/${WINLATOR_APP_ID}/files/imagefs/opt/${PROFILE_VERSION}"
-run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \"$SOURCE_DIR/configure\" \
+run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
+    PKG_CONFIG_LIBDIR=\"$DEPS_PREFIX/lib/pkgconfig:$DEPS_PREFIX/share/pkgconfig\" \
+    ACLOCAL_PATH=\"$DEPS_PREFIX/lib/aclocal:$DEPS_PREFIX/share/aclocal\" \
+    CPPFLAGS=\"-I$DEPS_PREFIX/include\" \
+    X_CFLAGS=\"-I$DEPS_PREFIX/include\" \
+    X_LIBS=\"-L$DEPS_PREFIX/lib\" \
+    \"$SOURCE_DIR/configure\" \
     --host=aarch64-linux-android \
     --with-wine-tools=\"$BUILD_DIR/host\" \
     --prefix=\"$PREFIX\" \
