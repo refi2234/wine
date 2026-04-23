@@ -63,13 +63,27 @@ log "=== Plain Wine ARM64EC Android Build ==="
 log "Build started: $(date -u)"
 log "Jobs: $JOBS"
 log "Log: $LOG_FILE"
-log "Termux deps prefix: $DEPS_PREFIX"
 
 if [[ -z "$NDK_PATH" ]]; then
     die "ANDROID_NDK_HOME not set. Use --ndk-path or export ANDROID_NDK_HOME."
 fi
 [[ -d "$NDK_PATH" ]] || die "NDK directory not found: $NDK_PATH"
 [[ -d "$SOURCE_DIR" ]] || die "Wine source not found: $SOURCE_DIR"
+
+if [[ ! -d "$DEPS_PREFIX" && -z "${TERMUX_DEPS_PREFIX:-}" ]]; then
+    for candidate in \
+        "/data/data/com.termux/files/usr" \
+        "/data/data/app.gamenative/files/imagefs/usr" \
+        "/data/data/com.winlator.cmod/files/usr"; do
+        if [[ -d "$candidate" ]]; then
+            log "Termux dependency prefix not found at $DEPS_PREFIX, using $candidate"
+            DEPS_PREFIX="$candidate"
+            break
+        fi
+    done
+fi
+
+log "Termux deps prefix: $DEPS_PREFIX"
 [[ -d "$DEPS_PREFIX" ]] || die "Termux dependency prefix not found: $DEPS_PREFIX"
 
 TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
