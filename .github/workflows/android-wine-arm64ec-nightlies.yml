@@ -72,7 +72,7 @@ on:
       prefix_pack_url:
         description: Prefix pack URL for the generated plain Wine ARM64EC profile
         required: false
-        default: https://raw.githubusercontent.com/GameNative/bionic-prefix-files/main/prefixPack-arm64ec.tzst
+        default: https://github.com/nnnnnnnnnn3773/wineu11/releases/download/2236636/prefixPack.txz
         type: string
       release_description:
         description: Optional extra text for the release notes
@@ -246,7 +246,7 @@ jobs:
           PROFILE_VERSION_CODE: ${{ github.event.inputs.wine_version_code || '1' }}
           WINE_PROFILE_DESCRIPTION_PREFIX: ${{ github.event.inputs.wine_profile_description || 'Wine ARM64EC build' }}
           WINLATOR_APP_ID: ${{ github.event.inputs.target_app_id || 'app.gamenative' }}
-          WINE_PREFIX_PACK_URL: ${{ github.event.inputs.prefix_pack_url || 'https://raw.githubusercontent.com/GameNative/bionic-prefix-files/main/prefixPack-arm64ec.tzst' }}
+          WINE_PREFIX_PACK_URL: ${{ github.event.inputs.prefix_pack_url || 'https://github.com/nnnnnnnnnn3773/wineu11/releases/download/2236636/prefixPack.txz' }}
         run: |
           bash "$TOOLKIT_DIR/scripts/build-wine-arm64ec.sh" --source-dir "$GITHUB_WORKSPACE/wine-source" --build-dir "$GITHUB_WORKSPACE/wine-build-arm64ec"
 
