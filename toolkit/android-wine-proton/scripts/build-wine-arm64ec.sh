@@ -8,6 +8,7 @@ BUILD_START_TIME="$(date -u +%s)"
 NDK_PATH="${ANDROID_NDK_HOME:-}"
 SOURCE_DIR="${WINE_SOURCE_DIR:-$(dirname "$SCRIPT_DIR")/wine-source}"
 BUILD_DIR="${BUILD_DIR:-$(dirname "$SCRIPT_DIR")/wine-build-arm64ec}"
+DEPS_PREFIX="${TERMUX_DEPS_PREFIX:-/data/data/com.termux/files/usr}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
 CLEAN_BUILD=0
 ANDROID_API=28
@@ -62,12 +63,14 @@ log "=== Plain Wine ARM64EC Android Build ==="
 log "Build started: $(date -u)"
 log "Jobs: $JOBS"
 log "Log: $LOG_FILE"
+log "Termux deps prefix: $DEPS_PREFIX"
 
 if [[ -z "$NDK_PATH" ]]; then
     die "ANDROID_NDK_HOME not set. Use --ndk-path or export ANDROID_NDK_HOME."
 fi
 [[ -d "$NDK_PATH" ]] || die "NDK directory not found: $NDK_PATH"
 [[ -d "$SOURCE_DIR" ]] || die "Wine source not found: $SOURCE_DIR"
+[[ -d "$DEPS_PREFIX" ]] || die "Termux dependency prefix not found: $DEPS_PREFIX"
 
 TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
 TARGET="aarch64-linux-android${ANDROID_API}"
@@ -77,6 +80,12 @@ AR="${TOOLCHAIN}/llvm-ar"
 STRIP="${TOOLCHAIN}/llvm-strip"
 
 [[ -f "$CC" ]] || die "Compiler not found: $CC"
+
+export PKG_CONFIG_LIBDIR="$DEPS_PREFIX/lib/pkgconfig:$DEPS_PREFIX/share/pkgconfig"
+export ACLOCAL_PATH="$DEPS_PREFIX/lib/aclocal:$DEPS_PREFIX/share/aclocal"
+export CPPFLAGS="-I$DEPS_PREFIX/include"
+export X_CFLAGS="-I$DEPS_PREFIX/include"
+export X_LIBS="-L$DEPS_PREFIX/lib"
 
 if [[ ! -f "$SOURCE_DIR/configure" && -f "$SOURCE_DIR/autogen.sh" ]]; then
     run_step autogen-source bash -lc "cd \"$SOURCE_DIR\" && bash autogen.sh"
@@ -135,7 +144,19 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \"$SOURCE_DIR/co
     --bindir=\"$PREFIX/bin\" \
     --libdir=\"$PREFIX/lib\" \
     --enable-archs=aarch64,i386 \
-    --without-x \
+    --with-x \
+    --with-xcursor \
+    --without-xfixes \
+    --without-xcomposite \
+    --without-xinerama \
+    --without-xinput \
+    --without-xinput2 \
+    --without-xrandr \
+    --without-xrender \
+    --without-xshape \
+    --without-xshm \
+    --without-xxf86vm \
+    --enable-wineandroid_drv=no \
     --without-freetype \
     --without-gnutls \
     --without-unwind \
@@ -161,8 +182,8 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \"$SOURCE_DIR/co
     STRIP=\"$STRIP\" \
     TARGETCC=\"$CC\" \
     TARGETCXX=\"$CXX\" \
-    CFLAGS=\"-O2 -DANDROID -fPIC\" \
-    LDFLAGS=\"-Wl,--build-id=sha1\""
+    CFLAGS=\"-O2 -DANDROID -fPIC -I$DEPS_PREFIX/include\" \
+    LDFLAGS=\"-L$DEPS_PREFIX/lib -Wl,-rpath=$DEPS_PREFIX/lib -Wl,--build-id=sha1\""
 
 run_step build-target-nls make -C "$BUILD_DIR/target" -j"$JOBS" nls/all
 run_step build-and-install-target make -C "$BUILD_DIR/target" -j"$JOBS" install DESTDIR="$BUILD_DIR/install"
@@ -171,6 +192,14 @@ INNER="$BUILD_DIR/install/data/data/${WINLATOR_APP_ID}/files/imagefs/opt/${PROFI
 [[ -d "$INNER" ]] || die "Expected install dir missing: $INNER"
 cp -r "$INNER/." "$BUILD_DIR/install/"
 rm -rf "$BUILD_DIR/install/data"
+
+if ! find "$BUILD_DIR/install/lib/wine" -type f -name 'winex11.drv*' | grep -q .; then
+    die "winex11.drv missing from staged Wine runtime; Winlator needs the X11 graphics driver"
+fi
+
+if ! find "$BUILD_DIR/install/lib/wine" -type f -path '*/aarch64-windows/ntdll.dll' | grep -q .; then
+    die "aarch64-windows/ntdll.dll missing from staged Wine runtime"
+fi
 
 run_step package-tar tar -Jcf "output/${ARTIFACT_BASENAME}.tar.xz" -C "$BUILD_DIR/install" bin lib share
 sha256sum "output/${ARTIFACT_BASENAME}.tar.xz" > "output/${ARTIFACT_BASENAME}.tar.xz.sha256"
