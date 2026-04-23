@@ -172,7 +172,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     --without-xrandr \
     --without-xrender \
     --without-xshape \
-    --with-xshm \
+    --without-xshm \
     --without-xxf86vm \
     --enable-wineandroid_drv=no \
     --without-freetype \
