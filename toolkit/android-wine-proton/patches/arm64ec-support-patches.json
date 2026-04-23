@@ -139,6 +139,11 @@
       "id": "arm64ec-0023d-box64-use-clear-cache-builtin",
       "description": "box64: use __builtin___clear_cache for Android PE linking",
       "path": "arm64ec-support-bundle/0023d-box64-use-builtin-clear-cache.patch"
+    },
+    {
+      "id": "arm64ec-0023e-esync-use-tmpdir",
+      "description": "esync: use TMPDIR for Android shared memory files",
+      "path": "arm64ec-support-bundle/0023e-esync-use-tmpdir.patch"
     }
   ]
 }

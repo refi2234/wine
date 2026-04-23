@@ -1,0 +1,66 @@
+diff --git a/dlls/ntdll/unix/esync.c b/dlls/ntdll/unix/esync.c
+--- a/dlls/ntdll/unix/esync.c
++++ b/dlls/ntdll/unix/esync.c
+@@ -1280,6 +1280,13 @@ NTSTATUS esync_signal_and_wait( HANDLE signal, HANDLE wait, BOOLEAN alertable,
+     return esync_wait_objects( 1, &wait, TRUE, alertable, timeout );
+ }
+
++static const char *get_esync_tmpdir(void)
++{
++    const char *tmpdir = getenv( "TMPDIR" );
++    if (!tmpdir || !tmpdir[0]) tmpdir = "/tmp";
++    return tmpdir;
++}
++
+ void esync_init(void)
+ {
+     struct stat st;
+@@ -1304,9 +1311,9 @@ void esync_init(void)
+         ERR("Cannot stat %s\n", config_dir);
+ 
+     if (st.st_ino != (unsigned long)st.st_ino)
+-        sprintf( shm_name, "/data/data/com.winemu/files/usr/tmp/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
++        sprintf( shm_name, "%s/wine-%lx%08lx-esync", get_esync_tmpdir(), (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
+     else
+-        sprintf( shm_name, "/data/data/com.winemu/files/usr/tmp/wine-%lx-esync", (unsigned long)st.st_ino );
++        sprintf( shm_name, "%s/wine-%lx-esync", get_esync_tmpdir(), (unsigned long)st.st_ino );
+ 
+     if ((shm_fd = open( shm_name, O_RDWR, 0644 )) == -1)
+     {
+diff --git a/server/esync.c b/server/esync.c
+--- a/server/esync.c
++++ b/server/esync.c
+@@ -24,6 +24,7 @@
+ #include <fcntl.h>
+ #include <stdio.h>
+ #include <stdarg.h>
++#include <stdlib.h>
+ #ifdef HAVE_SYS_EVENTFD_H
+ # include <sys/eventfd.h>
+ #endif
+@@ -67,6 +68,13 @@ static void shm_cleanup(void)
+         perror( "unlink" );
+ }
+ 
++static const char *get_esync_tmpdir(void)
++{
++    const char *tmpdir = getenv( "TMPDIR" );
++    if (!tmpdir || !tmpdir[0]) tmpdir = "/tmp";
++    return tmpdir;
++}
++
+ void esync_init(void)
+ {
+     struct stat st;
+@@ -76,9 +84,9 @@ void esync_init(void)
+         fatal_error( "cannot stat config dir\n" );
+ 
+     if (st.st_ino != (unsigned long)st.st_ino)
+-        sprintf( shm_name, "/data/data/com.winemu/files/usr/tmp/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
++        sprintf( shm_name, "%s/wine-%lx%08lx-esync", get_esync_tmpdir(), (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
+     else
+-        sprintf( shm_name, "/data/data/com.winemu/files/usr/tmp/wine-%lx-esync", (unsigned long)st.st_ino );
++        sprintf( shm_name, "%s/wine-%lx-esync", get_esync_tmpdir(), (unsigned long)st.st_ino );
+ 
+     unlink( shm_name );
+ 
