@@ -88,6 +88,14 @@ fi
 log "Termux deps prefix: $DEPS_PREFIX"
 [[ -d "$DEPS_PREFIX" ]] || die "Termux dependency prefix not found: $DEPS_PREFIX"
 
+X_LIBS="-L$DEPS_PREFIX/lib"
+if [[ -f "$DEPS_PREFIX/lib/libandroid-sysvshm.so" || -f "$DEPS_PREFIX/lib/libandroid-sysvshm.a" ]]; then
+    X_LIBS="$X_LIBS -landroid-sysvshm"
+    log "Using android-sysvshm from: $DEPS_PREFIX/lib"
+else
+    log "android-sysvshm library not found; continuing without it because xshm is disabled"
+fi
+
 TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
 TARGET="aarch64-linux-android${ANDROID_API}"
 CC="${TOOLCHAIN}/${TARGET}-clang"
@@ -152,7 +160,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     ACLOCAL_PATH=\"$DEPS_PREFIX/lib/aclocal:$DEPS_PREFIX/share/aclocal\" \
     CPPFLAGS=\"-I$DEPS_PREFIX/include\" \
     X_CFLAGS=\"-I$DEPS_PREFIX/include\" \
-    X_LIBS=\"-L$DEPS_PREFIX/lib -landroid-sysvshm\" \
+    X_LIBS=\"$X_LIBS\" \
     \"$SOURCE_DIR/configure\" \
     --host=aarch64-linux-android \
     --with-wine-tools=\"$BUILD_DIR/host\" \
