@@ -117,6 +117,44 @@ if [[ $CLEAN_BUILD -eq 1 ]]; then
 fi
 
 mkdir -p "$BUILD_DIR/host" "$BUILD_DIR/target" "$BUILD_DIR/install" output
+mkdir -p "$BUILD_DIR/toolchain-wrappers"
+
+REAL_DLLTOOL="$(command -v llvm-dlltool || true)"
+[[ -n "$REAL_DLLTOOL" ]] || die "llvm-dlltool not found in PATH"
+DLLTOOL="$BUILD_DIR/toolchain-wrappers/llvm-dlltool"
+cat >"$DLLTOOL" <<EOF
+#!/bin/bash
+set -euo pipefail
+real_dlltool="$REAL_DLLTOOL"
+args=()
+rewrite_next=0
+for arg in "\$@"; do
+    if [[ \$rewrite_next -eq 1 ]]; then
+        if [[ "\$arg" == "arm64ec" ]]; then
+            args+=("arm64")
+        else
+            args+=("\$arg")
+        fi
+        rewrite_next=0
+        continue
+    fi
+    case "\$arg" in
+        -m)
+            args+=("\$arg")
+            rewrite_next=1
+            ;;
+        -marm64ec)
+            args+=("-marm64")
+            ;;
+        *)
+            args+=("\$arg")
+            ;;
+    esac
+done
+exec "\$real_dlltool" "\${args[@]}"
+EOF
+chmod +x "$DLLTOOL"
+export PATH="$BUILD_DIR/toolchain-wrappers:$PATH"
 
 GIT_HASH="unknown"
 GIT_DATE="$(date -u +%Y%m%d)"
@@ -207,6 +245,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     CXX=\"$CXX\" \
     AR=\"$AR\" \
     STRIP=\"$STRIP\" \
+    DLLTOOL=\"$DLLTOOL\" \
     TARGETCC=\"$CC\" \
     TARGETCXX=\"$CXX\" \
     arm64ec_CC=\"$ARM64EC_PE_CC\" \
