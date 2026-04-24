@@ -102,6 +102,7 @@ CC="${TOOLCHAIN}/${TARGET}-clang"
 CXX="${TOOLCHAIN}/${TARGET}-clang++"
 AR="${TOOLCHAIN}/llvm-ar"
 STRIP="${TOOLCHAIN}/llvm-strip"
+ARM64EC_PE_CC="${ARM64EC_PE_CC:-clang --target=arm64ec-w64-windows-msvc}"
 
 [[ -f "$CC" ]] || die "Compiler not found: $CC"
 
@@ -167,7 +168,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     --prefix=\"$PREFIX\" \
     --bindir=\"$PREFIX/bin\" \
     --libdir=\"$PREFIX/lib\" \
-    --enable-archs=aarch64,i386 \
+    --enable-archs=arm64ec,aarch64,i386 \
     --with-x \
     --x-includes=\"$DEPS_PREFIX/include\" \
     --x-libraries=\"$DEPS_PREFIX/lib\" \
@@ -193,7 +194,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     --without-gstreamer \
     --without-alsa \
     --without-sdl \
-    --without-vulkan \
+    --with-vulkan \
     --without-cups \
     --without-krb5 \
     --without-gphoto \
@@ -208,6 +209,7 @@ run_step configure-target bash -lc "cd \"$BUILD_DIR/target\" && \
     STRIP=\"$STRIP\" \
     TARGETCC=\"$CC\" \
     TARGETCXX=\"$CXX\" \
+    arm64ec_CC=\"$ARM64EC_PE_CC\" \
     CFLAGS=\"-O2 -DANDROID -fPIC -I$DEPS_PREFIX/include\" \
     LDFLAGS=\"-Wl,--build-id=sha1\""
 
@@ -225,6 +227,10 @@ fi
 
 if ! find "$BUILD_DIR/install/lib/wine" -type f -path '*/aarch64-windows/ntdll.dll' | grep -q .; then
     die "aarch64-windows/ntdll.dll missing from staged Wine runtime"
+fi
+
+if ! find "$BUILD_DIR/install/lib/wine" -type f -path '*/arm64ec-windows/ntdll.dll' | grep -q .; then
+    die "arm64ec-windows/ntdll.dll missing from staged Wine runtime; ARM64EC mode will fail with c00000bb"
 fi
 
 run_step package-tar tar -Jcf "output/${ARTIFACT_BASENAME}.tar.xz" -C "$BUILD_DIR/install" bin lib share
