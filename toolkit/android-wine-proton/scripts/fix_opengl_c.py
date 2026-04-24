@@ -19,6 +19,10 @@ def apply(src, description, old, new):
     return src.replace(old, new, 1), 1
 
 
+def has_forceglx_declaration(src):
+    return re.search(r"\b(?:static\s+)?int\s+wine_x11forceglx\b", src) is not None
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: fix_opengl_c.py <wine-source-dir>")
@@ -50,7 +54,7 @@ def main():
     )
     total += n
 
-    if "wine_x11forceglx" not in src:
+    if not has_forceglx_declaration(src):
         pattern = re.compile(
             r"(UINT\s+X11DRV_OpenGLInit\s*\([^)]*\)\s*\n\{\n(?:[ \t].*\n)*?[ \t]*int\s+error_base,\s*event_base;\n)",
             re.MULTILINE,
@@ -59,6 +63,14 @@ def main():
         if match:
             src = src[: match.end()] + "#ifdef __ANDROID__\n    int wine_x11forceglx = 0;\n#endif\n" + src[match.end() :]
             print("  [regex android wine_x11forceglx variable] applied")
+            total += 1
+
+    if "wine_x11forceglx" in src and not has_forceglx_declaration(src):
+        pattern = re.compile(r"(UINT\s+X11DRV_OpenGLInit\s*\([^)]*\)\s*\n\{\n)", re.MULTILINE)
+        match = pattern.search(src)
+        if match:
+            src = src[: match.end()] + "#ifdef __ANDROID__\n    int wine_x11forceglx = 0;\n#endif\n" + src[match.end() :]
+            print("  [fallback android wine_x11forceglx variable] applied")
             total += 1
 
     if "|| wine_x11forceglx" not in src:
@@ -80,6 +92,14 @@ def main():
             )
             src = src[: match.start()] + replacement + src[match.end() :]
             print("  [regex android WINE_X11FORCEGLX handling] applied")
+            total += 1
+
+    if "wine_x11forceglx" in src and not has_forceglx_declaration(src):
+        pattern = re.compile(r"(UINT\s+X11DRV_OpenGLInit\s*\([^)]*\)\s*\n\{\n)", re.MULTILINE)
+        match = pattern.search(src)
+        if match:
+            src = src[: match.end()] + "#ifdef __ANDROID__\n    int wine_x11forceglx = 0;\n#endif\n" + src[match.end() :]
+            print("  [final fallback android wine_x11forceglx variable] applied")
             total += 1
 
     with open(path, "w", encoding="utf-8") as f:
