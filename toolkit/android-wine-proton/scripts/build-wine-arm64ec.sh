@@ -119,8 +119,21 @@ fi
 mkdir -p "$BUILD_DIR/host" "$BUILD_DIR/target" "$BUILD_DIR/install" output
 mkdir -p "$BUILD_DIR/toolchain-wrappers"
 
-REAL_DLLTOOL="$(command -v llvm-dlltool || true)"
-[[ -n "$REAL_DLLTOOL" ]] || die "llvm-dlltool not found in PATH"
+REAL_DLLTOOL="${LLVM_DLLTOOL:-}"
+if [[ -z "$REAL_DLLTOOL" ]]; then
+    for candidate in \
+        "$(command -v llvm-dlltool 2>/dev/null || true)" \
+        "$(command -v llvm-dlltool-18 2>/dev/null || true)" \
+        "/usr/lib/llvm-18/bin/llvm-dlltool" \
+        "/usr/bin/llvm-dlltool"; do
+        if [[ -n "$candidate" && -x "$candidate" ]]; then
+            REAL_DLLTOOL="$candidate"
+            break
+        fi
+    done
+fi
+[[ -n "$REAL_DLLTOOL" && -x "$REAL_DLLTOOL" ]] || die "llvm-dlltool not found in PATH or /usr/lib/llvm-18/bin"
+log "Using llvm-dlltool: $REAL_DLLTOOL"
 DLLTOOL="$BUILD_DIR/toolchain-wrappers/llvm-dlltool"
 cat >"$DLLTOOL" <<EOF
 #!/bin/bash
