@@ -12,14 +12,14 @@
       "sha256": "e02f6c856fe7e50da25712371c8e1a9cf791ee4861515b3733022e49521b7611"
     },
     "wineArm64ec": {
-      "versionName": "wine-9.20-arm64ec-20260423-95ee6540",
-      "date": "20260423",
-      "gitHash": "95ee6540",
-      "tarFileName": "wine-9.20-arm64ec-20260423-95ee6540.tar.xz",
-      "tarSha256": "39e031dd9b858683a84c5463a10b2cf808e4f04d464479420d167fd855cde362",
-      "releaseTag": "android-wine-arm64ec-24-20260423",
-      "fileName": "wine-9.20-arm64ec-20260423-95ee6540.wcp",
-      "sha256": "28cc782153b3d76abbe25357be464fa1ea2688a3c11b92a4172bb128d8b9616e"
+      "versionName": "wine-9.20-arm64ec-20260424-f286171f",
+      "date": "20260424",
+      "gitHash": "f286171f",
+      "tarFileName": "wine-9.20-arm64ec-20260424-f286171f.tar.xz",
+      "tarSha256": "588eb09d3bc3f8a049bb0490cc3db442cc60445c394da00a030147d154a5f29e",
+      "releaseTag": "android-wine-arm64ec-3-20260424",
+      "fileName": "wine-9.20-arm64ec-20260424-f286171f.wcp",
+      "sha256": "fe4b651ddfd9ff1dcc936a6265297648a8534ba00cd86b2da3f0ce67f4e6f992"
     }
   }
 }
