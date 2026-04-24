@@ -23,6 +23,23 @@ def has_forceglx_declaration(src):
     return re.search(r"\b(?:static\s+)?int\s+wine_x11forceglx\b", src) is not None
 
 
+def ensure_forceglx_file_fallback(src):
+    marker = "/* Android fallback for patched WINE_X11FORCEGLX handling. */"
+    if marker in src:
+        return src, 0
+    fallback = (
+        "\n#ifdef __ANDROID__\n"
+        f"{marker}\n"
+        "static int wine_x11forceglx;\n"
+        "#endif\n"
+    )
+    include_match = list(re.finditer(r'^\s*#include\s+[<"].*[>"]\s*$', src, re.MULTILINE))
+    if include_match:
+        pos = include_match[-1].end()
+        return src[:pos] + fallback + src[pos:], 1
+    return fallback + "\n" + src, 1
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: fix_opengl_c.py <wine-source-dir>")
@@ -101,6 +118,12 @@ def main():
             src = src[: match.end()] + "#ifdef __ANDROID__\n    int wine_x11forceglx = 0;\n#endif\n" + src[match.end() :]
             print("  [final fallback android wine_x11forceglx variable] applied")
             total += 1
+
+    if "wine_x11forceglx" in src:
+        src, n = ensure_forceglx_file_fallback(src)
+        if n:
+            print("  [file-scope android wine_x11forceglx fallback] applied")
+            total += n
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(src)
