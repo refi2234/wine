@@ -244,6 +244,7 @@ jobs:
         shell: bash
         run: |
           python3 "$TOOLKIT_DIR/scripts/fix_opengl_c.py" "$GITHUB_WORKSPACE/wine-source"
+          python3 "$TOOLKIT_DIR/scripts/fix_winnt_arm64ec.py" "$GITHUB_WORKSPACE/wine-source"
 
       - name: Build plain Wine ARM64EC package
         shell: bash
