@@ -8,6 +8,7 @@ BUILD_START_TIME="$(date -u +%s)"
 NDK_PATH="${ANDROID_NDK_HOME:-}"
 SOURCE_DIR="${WINE_SOURCE_DIR:-$(dirname "$SCRIPT_DIR")/wine-source}"
 BUILD_DIR="${BUILD_DIR:-$(dirname "$SCRIPT_DIR")/wine-build-arm64ec}"
+LLVM_MINGW_ROOT="${LLVM_MINGW_ROOT:-/opt/llvm-mingw}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
 CLEAN_BUILD=0
 ANDROID_API=28
@@ -102,7 +103,13 @@ CC="${TOOLCHAIN}/${TARGET}-clang"
 CXX="${TOOLCHAIN}/${TARGET}-clang++"
 AR="${TOOLCHAIN}/llvm-ar"
 STRIP="${TOOLCHAIN}/llvm-strip"
-ARM64EC_PE_CC="${ARM64EC_PE_CC:-clang --target=arm64ec-w64-windows-msvc}"
+if [[ -d "$LLVM_MINGW_ROOT/bin" ]]; then
+    export PATH="$LLVM_MINGW_ROOT/bin:$PATH"
+fi
+ARM64EC_PE_CC="${ARM64EC_PE_CC:-arm64ec-w64-mingw32-clang}"
+if ! command -v "${ARM64EC_PE_CC%% *}" >/dev/null 2>&1; then
+    ARM64EC_PE_CC="clang --target=arm64ec-w64-windows-msvc"
+fi
 
 [[ -f "$CC" ]] || die "Compiler not found: $CC"
 
@@ -122,6 +129,7 @@ mkdir -p "$BUILD_DIR/toolchain-wrappers"
 REAL_DLLTOOL="${LLVM_DLLTOOL:-}"
 if [[ -z "$REAL_DLLTOOL" ]]; then
     for candidate in \
+        "$LLVM_MINGW_ROOT/bin/llvm-dlltool" \
         "$(command -v llvm-dlltool 2>/dev/null || true)" \
         "$(command -v llvm-dlltool-18 2>/dev/null || true)" \
         "/usr/lib/llvm-18/bin/llvm-dlltool" \

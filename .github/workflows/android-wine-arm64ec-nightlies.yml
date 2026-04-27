@@ -72,7 +72,7 @@ on:
       prefix_pack_url:
         description: Prefix pack URL for the generated plain Wine ARM64EC profile
         required: false
-        default: https://github.com/nnnnnnnnnn3773/wineu11/releases/download/2236636/prefixPack.txz
+        default: https://github.com/GameNative/bionic-prefix-files/raw/main/prefixPack-arm64ec.txz
         type: string
       release_description:
         description: Optional extra text for the release notes
@@ -193,9 +193,18 @@ jobs:
         id: setup_ndk
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r27c
+          ndk-version: r27d
           add-to-path: false
           link-to-sdk: true
+
+      - name: Set up LLVM MinGW
+        shell: bash
+        run: |
+          wget -q https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64.tar.xz
+          tar -xf llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64.tar.xz
+          sudo mv llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64 /opt/llvm-mingw
+          sudo chown -R "$(id -u):$(id -g)" /opt/llvm-mingw
+          echo "/opt/llvm-mingw/bin" >> "$GITHUB_PATH"
 
       - name: Clone ARM64EC Wine source
         shell: bash
@@ -246,7 +255,8 @@ jobs:
           PROFILE_VERSION_CODE: ${{ github.event.inputs.wine_version_code || '1' }}
           WINE_PROFILE_DESCRIPTION_PREFIX: ${{ github.event.inputs.wine_profile_description || 'Wine ARM64EC build' }}
           WINLATOR_APP_ID: ${{ github.event.inputs.target_app_id || 'app.gamenative' }}
-          WINE_PREFIX_PACK_URL: ${{ github.event.inputs.prefix_pack_url || 'https://github.com/nnnnnnnnnn3773/wineu11/releases/download/2236636/prefixPack.txz' }}
+          LLVM_MINGW_ROOT: /opt/llvm-mingw
+          WINE_PREFIX_PACK_URL: ${{ github.event.inputs.prefix_pack_url || 'https://github.com/GameNative/bionic-prefix-files/raw/main/prefixPack-arm64ec.txz' }}
         run: |
           bash "$TOOLKIT_DIR/scripts/build-wine-arm64ec.sh" --source-dir "$GITHUB_WORKSPACE/wine-source" --build-dir "$GITHUB_WORKSPACE/wine-build-arm64ec"
 
