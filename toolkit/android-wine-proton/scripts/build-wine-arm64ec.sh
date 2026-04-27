@@ -143,7 +143,7 @@ args=()
 rewrite_next=0
 for arg in "\$@"; do
     if [[ \$rewrite_next -eq 1 ]]; then
-        if [[ "\$arg" == "arm64ec" ]]; then
+        if [[ "\$arg" == "arm64ec" || "\$arg" == "aarch64" ]]; then
             args+=("arm64")
         else
             args+=("\$arg")
@@ -156,8 +156,14 @@ for arg in "\$@"; do
             args+=("\$arg")
             rewrite_next=1
             ;;
-        -marm64ec)
-            args+=("-marm64")
+        -marm64ec|-maarch64)
+            args+=("-m" "arm64")
+            ;;
+        --machine=arm64ec|--machine=aarch64)
+            args+=("-m" "arm64")
+            ;;
+        arm64ec|aarch64)
+            args+=("arm64")
             ;;
         *)
             args+=("\$arg")
