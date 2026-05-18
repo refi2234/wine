@@ -179,7 +179,6 @@ def ensure_ffs_builtin(source_dir: Path) -> str:
     if "ffs(" not in text:
         return "ffs: no bare ffs() call found, nothing to fix"
 
-    import re
     new_text = re.sub(r'\bffs\(', '__builtin_ffs(', text)
     if new_text == text:
         return "ffs: regex replacement had no effect"
