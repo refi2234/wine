@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Keep winnt.h ARM64EC-friendly when upstream chooses x86 inline asm."""
+"""Keep Wine source ARM64EC-friendly when upstream chooses x86 inline asm."""
 
+import re
 import sys
 from pathlib import Path
 
@@ -110,7 +111,60 @@ def main():
 
     path.write_text(text, encoding="utf-8")
     print(f"\nDone. Applied {total} fix(es) to winnt.h")
+
+    # ---- General scan: guard all x86-asm #if blocks across dlls/ ----
+    source_dir = Path(sys.argv[1])
+    scan_total = guard_x86_asm_blocks(source_dir)
+    print(f"General scan: guarded {scan_total} x86-asm #if block(s) across source tree")
+
     return 0
+
+
+# Pattern: full #if/#elif line that mentions an x86 arch macro.
+_X86_IF_RE = re.compile(
+    r'^(#\s*(?:if|elif)\b.+)$',
+    re.MULTILINE,
+)
+
+
+def guard_x86_asm_blocks(source_dir: Path) -> int:
+    """Add !defined(__arm64ec__) to #if blocks with x86 inline asm."""
+    total = 0
+    globs = list(source_dir.glob("dlls/**/*.[ch]"))
+    for fpath in globs:
+        try:
+            text = fpath.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+
+        new_text = text
+        for m in reversed(list(_X86_IF_RE.finditer(text))):
+            line = m.group(1)
+            # Must reference an x86 arch macro
+            if "defined(__i386__)" not in line and "defined(__x86_64__)" not in line:
+                continue
+            # Skip if already guarded for arm64ec
+            if "__arm64ec__" in line:
+                continue
+            # Check if the block (up to next #else/#elif/#endif) contains inline asm
+            block_start = m.end()
+            block_end = text.find("\n#e", block_start)
+            if block_end == -1:
+                block_end = min(block_start + 2000, len(text))
+            block = text[block_start:block_end]
+            if "__asm__" not in block:
+                continue
+            # Append the guard at the very end of the line
+            new_line = line + " && !defined(__arm64ec__)"
+            new_text = new_text[:m.start()] + new_line + new_text[m.end():]
+            rel = fpath.relative_to(source_dir)
+            print(f"  [general scan] {rel}:{text[:m.start()].count(chr(10))+1}: added arm64ec guard")
+            total += 1
+
+        if new_text != text:
+            fpath.write_text(new_text, encoding="utf-8")
+
+    return total
 
 
 if __name__ == "__main__":
