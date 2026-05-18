@@ -73,6 +73,30 @@ def main():
     )
     total += n
 
+    # YieldProcessor: exclude arm64ec from x86 "rep; nop" path
+    # Wine 9.20 checks x86 first; ARM64EC defines __x86_64__ so it hits
+    # the "rep; nop" path instead of the correct "dmb ishst; yield" path.
+    # Reorder branches to match upstream master (arm/aarch64/arm64ec first).
+    text, n = replace_once(
+        text,
+        "#if defined(__i386__) || defined(__x86_64__)\n"
+        '    __asm__ __volatile__( "rep; nop" : : : "memory" );\n'
+        "#elif defined(__arm__) || defined(__aarch64__)\n"
+        '    __asm__ __volatile__( "dmb ishst\\n\\tyield" : : : "memory" );\n'
+        "#else\n"
+        '    __asm__ __volatile__( "" : : : "memory" );\n'
+        "#endif\n",
+        "#if defined(__arm__) || defined(__aarch64__) || defined(__arm64ec__)\n"
+        '    __asm__ __volatile__( "dmb ishst\\n\\tyield" : : : "memory" );\n'
+        "#elif defined(__i386__) || defined(__x86_64__)\n"
+        '    __asm__ __volatile__( "rep; nop" : : : "memory" );\n'
+        "#else\n"
+        '    __asm__ __volatile__( "" : : : "memory" );\n'
+        "#endif\n",
+        "arm64ec YieldProcessor rep;nop",
+    )
+    total += n
+
     # __WINE_ATOMIC_LOAD/STORE: use proper __atomic builtins for arm64ec
     text, n = replace_once(
         text,
