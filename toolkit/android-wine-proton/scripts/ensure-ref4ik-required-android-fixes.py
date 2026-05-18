@@ -160,6 +160,33 @@ def ensure_winex11_glx_fix(source_dir: Path) -> str:
     raise RuntimeError(f"winex11: unable to locate a supported OpenGL init block in {path}")
 
 
+def ensure_ffs_builtin(source_dir: Path) -> str:
+    """Replace bare ffs() with __builtin_ffs() in unix_private.h.
+
+    Wine 11.0 uses ffs() which is not declared in Android NDK bionic
+    headers without <strings.h>.  __builtin_ffs is always available
+    with GCC/Clang and needs no header (upstream master already switched).
+    """
+    path = source_dir / "dlls" / "ntdll" / "unix" / "unix_private.h"
+    if not path.exists():
+        return "ffs: unix_private.h not found, skipping"
+
+    text = path.read_text(encoding="utf-8")
+
+    if "__builtin_ffs(" in text:
+        return "ffs: already uses __builtin_ffs"
+
+    if "ffs(" not in text:
+        return "ffs: no bare ffs() call found, nothing to fix"
+
+    new_text = re.sub(r'\bffs\(', '__builtin_ffs(', text)
+    if new_text == text:
+        return "ffs: regex replacement had no effect"
+
+    path.write_text(new_text, encoding="utf-8")
+    return "ffs: replaced bare ffs() with __builtin_ffs() for Android compatibility"
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: ensure-ref4ik-required-android-fixes.py <wine-source-dir>", file=sys.stderr)
@@ -174,6 +201,7 @@ def main() -> int:
         ensure_pulse_fix(source_dir),
         ensure_locale_fix(source_dir),
         ensure_winex11_glx_fix(source_dir),
+        ensure_ffs_builtin(source_dir),
     ]
     for line in results:
         print(line)
